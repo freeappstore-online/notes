@@ -46,8 +46,29 @@ export function loadNotes(): Note[] {
   }
 }
 
+export class StorageQuotaError extends Error {
+  constructor() {
+    super("Storage quota exceeded");
+    this.name = "StorageQuotaError";
+  }
+}
+
 export function saveNotes(notes: Note[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+  } catch (e) {
+    const quotaName = e instanceof Error ? e.name : "";
+    const code = (e as { code?: number } | null)?.code;
+    if (
+      quotaName === "QuotaExceededError" ||
+      quotaName === "NS_ERROR_DOM_QUOTA_REACHED" ||
+      code === 22 ||
+      code === 1014
+    ) {
+      throw new StorageQuotaError();
+    }
+    throw e;
+  }
 }
 
 export function formatTime(ts: number): string {

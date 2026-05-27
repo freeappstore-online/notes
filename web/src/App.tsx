@@ -4,6 +4,7 @@ import {
   type View,
   loadNotes,
   saveNotes,
+  StorageQuotaError,
   formatTime,
   filterAndSort,
   getChildren,
@@ -572,12 +573,22 @@ export function App() {
   const [qsQuery, setQsQuery] = useState("");
   const [qsIndex, setQsIndex] = useState(0);
   const [trashUndo, setTrashUndo] = useState<{ id: string; at: number } | null>(null);
+  const [quotaError, setQuotaError] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
   const vh = useViewportHeight();
 
   useDebouncedEffect(
     () => {
-      saveNotes(notes);
+      try {
+        saveNotes(notes);
+        setQuotaError(false);
+      } catch (e) {
+        if (e instanceof StorageQuotaError) {
+          setQuotaError(true);
+        } else {
+          throw e;
+        }
+      }
     },
     [notes],
     300,
@@ -1062,16 +1073,55 @@ export function App() {
               ))
             )
           ) : rootFiltered.length === 0 ? (
-            <p
+            <div
               style={{
-                color: "var(--color-muted)",
-                fontSize: "0.8125rem",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
                 textAlign: "center",
-                padding: "2rem 1rem",
+                padding: "2rem 1.25rem",
+                gap: "0.5rem",
               }}
             >
-              No pages yet
-            </p>
+              <div style={{ fontSize: "1.75rem", lineHeight: 1 }}>📓</div>
+              <div
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontWeight: 700,
+                  fontSize: "1rem",
+                  color: "var(--color-ink)",
+                }}
+              >
+                Welcome to Notes
+              </div>
+              <p
+                style={{
+                  color: "var(--color-muted)",
+                  fontSize: "0.75rem",
+                  lineHeight: 1.5,
+                  margin: 0,
+                  maxWidth: "16rem",
+                }}
+              >
+                A fast, local notebook with nested pages. Everything stays in this browser — no
+                account, no sync.
+              </p>
+              <button
+                onClick={() => startCreateNote(null)}
+                style={{
+                  ...btnBase,
+                  marginTop: "0.5rem",
+                  background: "var(--color-accent)",
+                  color: "#fff",
+                  padding: "0.5rem 1rem",
+                  fontSize: "0.8125rem",
+                  fontWeight: 600,
+                  minHeight: "2.5rem",
+                }}
+              >
+                Create your first page
+              </button>
+            </div>
           ) : (
             rootFiltered.map((note) => (
               <PageTreeItem
@@ -1551,6 +1601,50 @@ export function App() {
           pathOf={notePath}
         />
       )}
+      {quotaError && (
+        <div
+          role="alert"
+          style={{
+            position: "fixed",
+            top: "calc(env(safe-area-inset-top) + 0.5rem)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 95,
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            background: "#fef3c7",
+            color: "#7c2d12",
+            padding: "0.5rem 0.875rem",
+            borderRadius: "0.5rem",
+            border: "1px solid #f59e0b",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+            fontSize: "0.8125rem",
+            maxWidth: "calc(100vw - 2rem)",
+          }}
+        >
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <strong>Storage full.</strong> Your latest edits couldn't be saved. Use Backup to
+            export, then delete pages or empty the trash.
+          </span>
+          <button
+            onClick={exportAll}
+            style={{
+              background: "#7c2d12",
+              color: "#fff",
+              border: "none",
+              borderRadius: "0.375rem",
+              padding: "0.375rem 0.625rem",
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            Backup now
+          </button>
+        </div>
+      )}
       {trashUndo && (
         <div
           role="status"
@@ -1649,20 +1743,43 @@ export function App() {
         >
           <span style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}>notes</span>
           {view.kind === "list" && !showTemplates && (
-            <button
-              onClick={() => startCreateNote(null)}
-              style={{
-                ...btnBase,
-                background: "var(--color-accent)",
-                color: "#fff",
-                padding: "0.5rem 1rem",
-                fontSize: "0.9375rem",
-                fontWeight: 600,
-                minHeight: "2.75rem",
-              }}
-            >
-              + New
-            </button>
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <button
+                onClick={() => {
+                  setQsQuery("");
+                  setQsIndex(0);
+                  setQsOpen(true);
+                }}
+                style={{
+                  ...btnBase,
+                  background: "transparent",
+                  border: "1px solid var(--color-line)",
+                  color: "var(--color-muted)",
+                  padding: "0.5rem 0.75rem",
+                  fontSize: "0.9375rem",
+                  minHeight: "2.75rem",
+                  minWidth: "2.75rem",
+                }}
+                title="Jump to page"
+                aria-label="Jump to page"
+              >
+                🔎
+              </button>
+              <button
+                onClick={() => startCreateNote(null)}
+                style={{
+                  ...btnBase,
+                  background: "var(--color-accent)",
+                  color: "#fff",
+                  padding: "0.5rem 1rem",
+                  fontSize: "0.9375rem",
+                  fontWeight: 600,
+                  minHeight: "2.75rem",
+                }}
+              >
+                + New
+              </button>
+            </div>
           )}
         </header>
         <main style={{ flex: 1, overflow: "auto" }}>

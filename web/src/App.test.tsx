@@ -18,7 +18,8 @@ function flushDebounce() {
 describe("App", () => {
   it("renders empty state", () => {
     render(<App />);
-    expect(screen.getAllByText(/No pages yet/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Welcome to Notes/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Create your first page/).length).toBeGreaterThanOrEqual(1);
   });
 
   it("creates a note via quick note (Cmd+N) and opens editor", async () => {
