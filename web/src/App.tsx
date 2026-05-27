@@ -75,7 +75,8 @@ export function App() {
   const [notes, setNotes] = useState<Note[]>(loadNotes);
   const [view, setView] = useState<View>({ kind: "list" });
   const [search, setSearch] = useState("");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     saveNotes(notes);
@@ -108,12 +109,15 @@ export function App() {
     setSearch("");
   }, []);
 
-  const updateNote = useCallback((id: string, text: string) => {
-    const lines = text.split("\n");
-    const title = lines[0] ?? "";
-    const body = lines.slice(1).join("\n");
+  const updateTitle = useCallback((id: string, title: string) => {
     setNotes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, title, body, updatedAt: Date.now() } : n)),
+      prev.map((n) => (n.id === id ? { ...n, title, updatedAt: Date.now() } : n)),
+    );
+  }, []);
+
+  const updateBody = useCallback((id: string, body: string) => {
+    setNotes((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, body, updatedAt: Date.now() } : n)),
     );
   }, []);
 
@@ -130,16 +134,11 @@ export function App() {
     setView({ kind: "list" });
   }, []);
 
-  // Focus textarea when opening editor
   useEffect(() => {
-    if (view.kind === "editor" && textareaRef.current) {
-      textareaRef.current.focus();
+    if (view.kind === "editor" && titleRef.current) {
+      titleRef.current.focus();
     }
   }, [view]);
-
-  const editorContent = activeNote
-    ? activeNote.title + (activeNote.body ? "\n" + activeNote.body : "")
-    : "";
 
   // ── Note list (shared between sidebar + mobile) ────────────────────
 
@@ -279,17 +278,43 @@ export function App() {
           Delete
         </button>
       </div>
+      <input
+        ref={titleRef}
+        value={activeNote.title}
+        onChange={(e) => updateTitle(activeNote.id, e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            bodyRef.current?.focus();
+          }
+        }}
+        placeholder="Title"
+        style={{
+          width: "100%",
+          outline: "none",
+          padding: "1.5rem 1.5rem 0.25rem",
+          fontSize: "1.25rem",
+          fontWeight: 700,
+          lineHeight: 1.4,
+          background: "transparent",
+          color: "var(--color-ink)",
+          border: "none",
+          fontFamily: "var(--font-body)",
+          userSelect: "text",
+          WebkitUserSelect: "text",
+        }}
+      />
       <textarea
-        ref={textareaRef}
-        value={editorContent}
-        onChange={(e) => updateNote(activeNote.id, e.target.value)}
-        placeholder="Start writing... (first line becomes the title)"
+        ref={bodyRef}
+        value={activeNote.body}
+        onChange={(e) => updateBody(activeNote.id, e.target.value)}
+        placeholder="Start writing..."
         style={{
           flex: 1,
           width: "100%",
           resize: "none",
           outline: "none",
-          padding: "1.5rem",
+          padding: "0.25rem 1.5rem 1.5rem",
           fontSize: "1rem",
           lineHeight: 1.7,
           background: "transparent",
