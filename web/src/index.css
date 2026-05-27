@@ -32,8 +32,11 @@ html, body, #root {
   background: var(--color-paper);
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
-  -webkit-user-select: none;
-  user-select: none;
+}
+
+textarea, input {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 h1, h2, h3 { font-family: var(--font-display); }
