@@ -80,7 +80,14 @@ export function filterAndSort(notes: Note[], search: string): Note[] {
 }
 
 export function getRootNotes(notes: Note[]): Note[] {
-  return notes.filter((n) => n.parentId === null && n.deletedAt === null);
+  const activeById = new Map(
+    notes.filter((n) => n.deletedAt === null).map((n) => [n.id, n] as const),
+  );
+  return notes.filter(
+    (n) =>
+      n.deletedAt === null &&
+      (n.parentId === null || !activeById.has(n.parentId)),
+  );
 }
 
 export function getChildren(notes: Note[], parentId: string): Note[] {
@@ -88,8 +95,15 @@ export function getChildren(notes: Note[], parentId: string): Note[] {
 }
 
 export function getTrash(notes: Note[]): Note[] {
+  const deletedById = new Map(
+    notes.filter((n) => n.deletedAt !== null).map((n) => [n.id, n] as const),
+  );
   return notes
-    .filter((n) => n.deletedAt !== null)
+    .filter(
+      (n) =>
+        n.deletedAt !== null &&
+        (n.parentId === null || !deletedById.has(n.parentId)),
+    )
     .sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0));
 }
 

@@ -5,6 +5,8 @@ import {
   saveNotes,
   formatTime,
   filterAndSort,
+  getRootNotes,
+  getTrash,
   createNote,
   STORAGE_KEY,
   type Note,
@@ -244,5 +246,101 @@ describe("createNote", () => {
     const note = createNote();
     expect(note.createdAt).toBe(note.updatedAt);
     expect(note.createdAt).toBeGreaterThan(0);
+  });
+
+  it("creates a note with deletedAt null", () => {
+    expect(createNote().deletedAt).toBeNull();
+  });
+});
+
+// ── getRootNotes ──────────────────────────────────────────────────────
+
+describe("getRootNotes", () => {
+  const base: Note = {
+    id: "x",
+    parentId: null,
+    title: "",
+    body: "",
+    pinned: false,
+    tags: [],
+    icon: "",
+    template: null,
+    createdAt: 1,
+    updatedAt: 1,
+    deletedAt: null,
+  };
+
+  it("returns active top-level notes", () => {
+    const notes: Note[] = [
+      { ...base, id: "a" },
+      { ...base, id: "b", parentId: "a" },
+    ];
+    const roots = getRootNotes(notes);
+    expect(roots.map((n) => n.id)).toEqual(["a"]);
+  });
+
+  it("excludes soft-deleted notes", () => {
+    const notes: Note[] = [
+      { ...base, id: "a", deletedAt: 100 },
+      { ...base, id: "b" },
+    ];
+    expect(getRootNotes(notes).map((n) => n.id)).toEqual(["b"]);
+  });
+
+  it("surfaces orphans whose parent was purged or deleted", () => {
+    const notes: Note[] = [
+      { ...base, id: "a", deletedAt: 100 },
+      { ...base, id: "b", parentId: "a" },
+      { ...base, id: "c", parentId: "ghost" },
+    ];
+    const ids = getRootNotes(notes)
+      .map((n) => n.id)
+      .sort();
+    expect(ids).toEqual(["b", "c"]);
+  });
+});
+
+// ── getTrash ──────────────────────────────────────────────────────────
+
+describe("getTrash", () => {
+  const base: Note = {
+    id: "x",
+    parentId: null,
+    title: "",
+    body: "",
+    pinned: false,
+    tags: [],
+    icon: "",
+    template: null,
+    createdAt: 1,
+    updatedAt: 1,
+    deletedAt: null,
+  };
+
+  it("only returns deletion roots, not their deleted descendants", () => {
+    const notes: Note[] = [
+      { ...base, id: "a", deletedAt: 100 },
+      { ...base, id: "b", parentId: "a", deletedAt: 100 },
+      { ...base, id: "c", parentId: "a", deletedAt: 100 },
+      { ...base, id: "d" },
+    ];
+    expect(getTrash(notes).map((n) => n.id)).toEqual(["a"]);
+  });
+
+  it("shows separately-deleted notes as independent rows", () => {
+    const notes: Note[] = [
+      { ...base, id: "a", deletedAt: 100 },
+      { ...base, id: "b", deletedAt: 200 },
+    ];
+    const ids = getTrash(notes).map((n) => n.id);
+    expect(ids).toEqual(["b", "a"]);
+  });
+
+  it("shows a deleted child as its own row when parent is still active", () => {
+    const notes: Note[] = [
+      { ...base, id: "a" },
+      { ...base, id: "b", parentId: "a", deletedAt: 100 },
+    ];
+    expect(getTrash(notes).map((n) => n.id)).toEqual(["b"]);
   });
 });
