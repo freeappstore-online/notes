@@ -7,6 +7,8 @@ import {
   formatTime,
   filterAndSort,
   getChildren,
+  getTrash,
+  migrateNote,
   createNote as makeNote,
   TEMPLATES,
 } from "./notes.ts";
@@ -461,6 +463,101 @@ function QuickSwitcher({
   );
 }
 
+// ── Trash view ─────────────────────────────────────────────────────────
+
+interface TrashViewProps {
+  items: Note[];
+  onRestore: (id: string) => void;
+  onPurge: (id: string) => void;
+  onEmpty: () => void;
+  onClose: () => void;
+}
+
+function TrashView({ items, onRestore, onPurge, onEmpty, onClose }: TrashViewProps) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.5rem",
+          padding: "0.5rem 1rem",
+          borderBottom: "1px solid var(--color-line)",
+          flexShrink: 0,
+        }}
+      >
+        <button onClick={onClose} style={{ ...btnGhost }}>
+          Back
+        </button>
+        <div style={{ flex: 1, fontWeight: 600, fontSize: "0.9375rem" }}>Trash</div>
+        {items.length > 0 && (
+          <button
+            onClick={() => {
+              if (confirm(`Permanently delete ${items.length} page(s)?`)) onEmpty();
+            }}
+            style={{ ...btnGhost, color: "var(--color-muted)" }}
+            title="Empty the trash permanently"
+          >
+            Empty trash
+          </button>
+        )}
+      </div>
+      <div style={{ flex: 1, overflow: "auto", padding: "0.5rem 0" }}>
+        {items.length === 0 ? (
+          <p style={{ color: "var(--color-muted)", textAlign: "center", padding: "2rem 1rem" }}>
+            Trash is empty
+          </p>
+        ) : (
+          items.map((n) => (
+            <div
+              key={n.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.625rem",
+                padding: "0.5rem 1rem",
+                borderBottom: "1px solid var(--color-line)",
+              }}
+            >
+              <span style={{ fontSize: "1.125rem", width: "1.5rem", textAlign: "center" }}>
+                {n.icon || "\u{1F4C4}"}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: "0.875rem",
+                    color: "var(--color-ink)",
+                    fontWeight: 500,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {n.title || "Untitled"}
+                </div>
+                <div style={{ fontSize: "0.6875rem", color: "var(--color-muted)" }}>
+                  deleted {n.deletedAt ? formatTime(n.deletedAt) : ""}
+                </div>
+              </div>
+              <button onClick={() => onRestore(n.id)} style={{ ...btnGhost }}>
+                Restore
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm("Permanently delete this page?")) onPurge(n.id);
+                }}
+                style={{ ...btnGhost, color: "var(--color-muted)" }}
+              >
+                Delete
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── App ────────────────────────────────────────────────────────────────
 
 export function App() {
@@ -474,6 +571,7 @@ export function App() {
   const [qsOpen, setQsOpen] = useState(false);
   const [qsQuery, setQsQuery] = useState("");
   const [qsIndex, setQsIndex] = useState(0);
+  const [trashUndo, setTrashUndo] = useState<{ id: string; at: number } | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const vh = useViewportHeight();
 
@@ -485,6 +583,13 @@ export function App() {
     300,
   );
 
+  useEffect(() => {
+    if (!trashUndo) return;
+    const id = setTimeout(() => setTrashUndo(null), 6000);
+    return () => clearTimeout(id);
+  }, [trashUndo]);
+
+
   const activeNote =
     view.kind === "editor" ? (notes.find((n) => n.id === view.noteId) ?? null) : null;
   const activeNoteId = activeNote?.id ?? null;
@@ -494,6 +599,8 @@ export function App() {
     () => filtered.filter((n) => n.parentId === null),
     [filtered],
   );
+  const trashList = useMemo(() => getTrash(notes), [notes]);
+  const trashCount = trashList.length;
   const breadcrumbs = useMemo(() => {
     if (!activeNote) return [];
     const trail: Note[] = [];
@@ -566,17 +673,62 @@ export function App() {
     [],
   );
 
+  const exportAll = useCallback(() => {
+    const payload = {
+      app: "freenotes",
+      version: 1,
+      exportedAt: Date.now(),
+      notes,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.download = `notes-backup-${stamp}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [notes]);
+
   const deleteNote = useCallback((id: string) => {
+    const now = Date.now();
     setNotes((prev) => {
-      const toRemove = new Set<string>();
+      const affected = new Set<string>();
       function collect(noteId: string) {
-        toRemove.add(noteId);
-        prev.filter((n) => n.parentId === noteId).forEach((n) => collect(n.id));
+        affected.add(noteId);
+        prev
+          .filter((n) => n.parentId === noteId && n.deletedAt === null)
+          .forEach((n) => collect(n.id));
       }
       collect(id);
-      return prev.filter((n) => !toRemove.has(n.id));
+      return prev.map((n) => (affected.has(n.id) ? { ...n, deletedAt: now } : n));
     });
     setView((prev) => (prev.kind === "editor" && prev.noteId === id ? { kind: "list" } : prev));
+    setTrashUndo({ id, at: now });
+  }, []);
+
+  const restoreNote = useCallback((id: string) => {
+    setNotes((prev) => {
+      const target = prev.find((n) => n.id === id);
+      if (!target || target.deletedAt === null) return prev;
+      const ts = target.deletedAt;
+      return prev.map((n) =>
+        n.deletedAt === ts ? { ...n, deletedAt: null } : n,
+      );
+    });
+  }, []);
+
+  const purgeNote = useCallback((id: string) => {
+    setNotes((prev) => {
+      const target = prev.find((n) => n.id === id);
+      if (!target || target.deletedAt === null) return prev;
+      const ts = target.deletedAt;
+      return prev.filter((n) => n.deletedAt !== ts);
+    });
+  }, []);
+
+  const emptyTrash = useCallback(() => {
+    setNotes((prev) => prev.filter((n) => n.deletedAt === null));
   }, []);
 
   const togglePin = useCallback((id: string) => {
@@ -602,13 +754,45 @@ export function App() {
   const importMarkdown = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".md,.markdown,.txt";
+    input.accept = ".md,.markdown,.txt,.json";
     input.onchange = () => {
       const file = input.files?.[0];
       if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
         const text = reader.result as string;
+        const isJson = file.name.toLowerCase().endsWith(".json");
+        if (isJson) {
+          try {
+            const parsed = JSON.parse(text);
+            const raw = Array.isArray(parsed)
+              ? parsed
+              : Array.isArray(parsed?.notes)
+                ? parsed.notes
+                : null;
+            if (!raw) {
+              alert("That JSON doesn't look like a notes backup.");
+              return;
+            }
+            const imported = (raw as Record<string, unknown>[])
+              .map(migrateNote)
+              .map((n) => ({ ...n, id: crypto.randomUUID() }));
+            const idMap = new Map<string, string>();
+            (raw as Record<string, unknown>[]).forEach((src, i) => {
+              const oldId = typeof src.id === "string" ? src.id : null;
+              if (oldId && imported[i]) idMap.set(oldId, imported[i].id);
+            });
+            const remapped = imported.map((n) => ({
+              ...n,
+              parentId: n.parentId && idMap.get(n.parentId) ? idMap.get(n.parentId)! : null,
+            }));
+            setNotes((prev) => [...remapped, ...prev]);
+            alert(`Imported ${remapped.length} page(s).`);
+          } catch {
+            alert("Could not parse JSON backup.");
+          }
+          return;
+        }
         const lines = text.split("\n");
         let title = "";
         let bodyStart = 0;
@@ -631,6 +815,7 @@ export function App() {
           template: null,
           createdAt: now,
           updatedAt: now,
+          deletedAt: null,
         };
         setNotes((prev) => [note, ...prev]);
         setView({ kind: "editor", noteId: note.id });
@@ -902,6 +1087,28 @@ export function App() {
           )}
         </div>
 
+        {trashCount > 0 && (
+          <button
+            onClick={() => setView({ kind: "trash" })}
+            style={{
+              ...btnBase,
+              background: "transparent",
+              border: "none",
+              borderTop: "1px solid var(--color-line)",
+              color: "var(--color-muted)",
+              padding: "0.5rem 0.75rem",
+              fontSize: "0.75rem",
+              textAlign: "left",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+            title="Open trash"
+          >
+            <span>🗑 Trash</span>
+            <span style={{ fontSize: "0.6875rem" }}>{trashCount}</span>
+          </button>
+        )}
         <div style={{ padding: "0.5rem", borderTop: "1px solid var(--color-line)", display: "flex", gap: "0.375rem" }}>
           <button
             onClick={() => startCreateNote(null)}
@@ -931,6 +1138,20 @@ export function App() {
           >
             Import
           </button>
+          <button
+            onClick={exportAll}
+            style={{
+              ...btnBase,
+              background: "transparent",
+              border: "1px solid var(--color-line)",
+              color: "var(--color-muted)",
+              padding: "0.5rem 0.625rem",
+              fontSize: "0.8125rem",
+            }}
+            title="Download a JSON backup of every page"
+          >
+            Backup
+          </button>
         </div>
       </div>
     );
@@ -942,6 +1163,14 @@ export function App() {
 
   const editorPanel = showTemplates ? (
     <TemplatePicker onPick={finishCreateNote} />
+  ) : view.kind === "trash" ? (
+    <TrashView
+      items={trashList}
+      onRestore={restoreNote}
+      onPurge={purgeNote}
+      onEmpty={emptyTrash}
+      onClose={() => setView({ kind: "list" })}
+    />
   ) : activeNote ? (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Toolbar */}
@@ -1321,6 +1550,47 @@ export function App() {
           onClose={() => setQsOpen(false)}
           pathOf={notePath}
         />
+      )}
+      {trashUndo && (
+        <div
+          role="status"
+          style={{
+            position: "fixed",
+            bottom: "calc(1rem + env(safe-area-inset-bottom))",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 90,
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            background: "var(--color-ink)",
+            color: "var(--color-bg)",
+            padding: "0.5rem 0.5rem 0.5rem 0.875rem",
+            borderRadius: "0.5rem",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+            fontSize: "0.8125rem",
+          }}
+        >
+          <span>Page moved to trash</span>
+          <button
+            onClick={() => {
+              restoreNote(trashUndo.id);
+              setTrashUndo(null);
+            }}
+            style={{
+              background: "var(--color-accent)",
+              color: "#fff",
+              border: "none",
+              borderRadius: "0.375rem",
+              padding: "0.375rem 0.75rem",
+              fontSize: "0.8125rem",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Undo
+          </button>
+        </div>
       )}
       {/* Desktop */}
       <div className="hidden md:flex" style={{ height: "100dvh" }}>

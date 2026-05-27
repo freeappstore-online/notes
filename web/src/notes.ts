@@ -9,9 +9,13 @@ export interface Note {
   template: string | null;
   createdAt: number;
   updatedAt: number;
+  deletedAt: number | null;
 }
 
-export type View = { kind: "list" } | { kind: "editor"; noteId: string };
+export type View =
+  | { kind: "list" }
+  | { kind: "editor"; noteId: string }
+  | { kind: "trash" };
 
 export const STORAGE_KEY = "notes_data";
 
@@ -29,6 +33,7 @@ export function migrateNote(n: Record<string, unknown>): Note {
     template: typeof n.template === "string" ? n.template : null,
     createdAt: typeof n.createdAt === "number" ? n.createdAt : Date.now(),
     updatedAt: typeof n.updatedAt === "number" ? n.updatedAt : Date.now(),
+    deletedAt: typeof n.deletedAt === "number" ? n.deletedAt : null,
   };
 }
 
@@ -58,6 +63,7 @@ export function formatTime(ts: number): string {
 
 export function filterAndSort(notes: Note[], search: string): Note[] {
   return notes
+    .filter((n) => n.deletedAt === null)
     .filter((n) => {
       if (!search) return true;
       const q = search.toLowerCase();
@@ -74,11 +80,17 @@ export function filterAndSort(notes: Note[], search: string): Note[] {
 }
 
 export function getRootNotes(notes: Note[]): Note[] {
-  return notes.filter((n) => n.parentId === null);
+  return notes.filter((n) => n.parentId === null && n.deletedAt === null);
 }
 
 export function getChildren(notes: Note[], parentId: string): Note[] {
-  return notes.filter((n) => n.parentId === parentId);
+  return notes.filter((n) => n.parentId === parentId && n.deletedAt === null);
+}
+
+export function getTrash(notes: Note[]): Note[] {
+  return notes
+    .filter((n) => n.deletedAt !== null)
+    .sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0));
 }
 
 export function createNote(parentId: string | null = null, template: string | null = null): Note {
@@ -95,6 +107,7 @@ export function createNote(parentId: string | null = null, template: string | nu
     template,
     createdAt: now,
     updatedAt: now,
+    deletedAt: null,
   };
 }
 

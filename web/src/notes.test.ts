@@ -25,6 +25,7 @@ describe("migrateNote", () => {
       template: null,
       createdAt: 1000,
       updatedAt: 2000,
+      deletedAt: null,
     };
     expect(migrateNote(input)).toEqual(input);
   });
@@ -92,6 +93,7 @@ describe("loadNotes / saveNotes", () => {
         template: null,
         createdAt: 100,
         updatedAt: 200,
+        deletedAt: null,
       },
     ];
     saveNotes(notes);
@@ -145,6 +147,7 @@ describe("filterAndSort", () => {
     template: null,
     createdAt: 100,
     updatedAt: 100,
+    deletedAt: null,
   };
 
   it("returns all notes when search is empty", () => {

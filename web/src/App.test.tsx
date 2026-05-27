@@ -39,7 +39,7 @@ describe("App", () => {
     expect(stored[0].title).toBe("My First Note");
   });
 
-  it("deletes a note", async () => {
+  it("soft-deletes a note (moves to trash)", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<App />);
     await user.keyboard("{Meta>}n{/Meta}");
@@ -49,7 +49,8 @@ describe("App", () => {
     await user.click(deleteButtons[0]!);
     flushDebounce();
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
-    expect(stored).toHaveLength(0);
+    expect(stored).toHaveLength(1);
+    expect(stored[0].deletedAt).toEqual(expect.any(Number));
   });
 
   it("searches notes by title", async () => {
