@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { marked } from "marked";
 import {
   type Note,
@@ -11,6 +11,14 @@ import {
 } from "./notes.ts";
 
 marked.setOptions({ breaks: true, gfm: true });
+
+function useDebouncedEffect(fn: () => void, deps: unknown[], ms: number) {
+  useEffect(() => {
+    const id = setTimeout(fn, ms);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+}
 
 // ── Hooks ─────────────────────────────────────────────────────────────
 
@@ -242,14 +250,13 @@ export function App() {
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const vh = useViewportHeight();
 
-  useEffect(() => {
-    saveNotes(notes);
-  }, [notes]);
+  useDebouncedEffect(() => { saveNotes(notes); }, [notes], 300);
 
   const activeNote =
     view.kind === "editor" ? (notes.find((n) => n.id === view.noteId) ?? null) : null;
+  const activeNoteId = activeNote?.id ?? null;
 
-  const filtered = filterAndSort(notes, search);
+  const filtered = useMemo(() => filterAndSort(notes, search), [notes, search]);
 
   const createNote = useCallback(() => {
     const note = makeNote();
@@ -279,19 +286,23 @@ export function App() {
 
   const togglePin = useCallback((id: string) => {
     setNotes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, pinned: !n.pinned, updatedAt: Date.now() } : n)),
+      prev.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)),
     );
   }, []);
 
-  const addTag = useCallback((id: string, tag: string) => {
-    const t = tag.toLowerCase().trim();
-    if (!t) return;
+  const addTag = useCallback((id: string, raw: string) => {
+    const newTags = raw
+      .split(",")
+      .map((s) => s.toLowerCase().trim())
+      .filter(Boolean);
+    if (newTags.length === 0) return;
     setNotes((prev) =>
-      prev.map((n) =>
-        n.id === id && !n.tags.includes(t)
-          ? { ...n, tags: [...n.tags, t], updatedAt: Date.now() }
-          : n,
-      ),
+      prev.map((n) => {
+        if (n.id !== id) return n;
+        const deduped = newTags.filter((t) => !n.tags.includes(t));
+        if (deduped.length === 0) return n;
+        return { ...n, tags: [...n.tags, ...deduped], updatedAt: Date.now() };
+      }),
     );
   }, []);
 
@@ -310,6 +321,7 @@ export function App() {
   }, []);
 
   const goBack = useCallback(() => {
+    setNotes((prev) => prev.filter((n) => n.title || n.body));
     setView({ kind: "list" });
     setPreview(false);
     setTagInput("");
@@ -323,37 +335,45 @@ export function App() {
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────
 
+  const activeNoteIdRef = useRef(activeNoteId);
+  activeNoteIdRef.current = activeNoteId;
+  const searchRef = useRef(search);
+  searchRef.current = search;
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const meta = e.metaKey || e.ctrlKey;
+      const inInput =
+        e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+
       if (meta && e.key === "n") {
         e.preventDefault();
         createNote();
       }
-      if (meta && e.key === "Backspace" && activeNote) {
+      if (meta && e.key === "Backspace" && activeNoteIdRef.current) {
         e.preventDefault();
-        deleteNote(activeNote.id);
+        deleteNote(activeNoteIdRef.current);
       }
       if (meta && e.key === "f") {
         e.preventDefault();
         const input = document.querySelector<HTMLInputElement>("[data-search]");
         input?.focus();
       }
-      if (meta && e.key === "e" && activeNote) {
+      if (meta && e.key === "e" && activeNoteIdRef.current) {
         e.preventDefault();
         setPreview((p) => !p);
       }
-      if (e.key === "Escape") {
-        if (search) {
+      if (e.key === "Escape" && !inInput) {
+        if (searchRef.current) {
           setSearch("");
-        } else if (view.kind === "editor") {
+        } else {
           goBack();
         }
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeNote, view, search, createNote, deleteNote, goBack]);
+  }, [createNote, deleteNote, goBack]);
 
   // ── Note list ──────────────────────────────────────────────────────
 
