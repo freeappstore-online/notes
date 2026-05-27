@@ -397,6 +397,119 @@ export function editorHtmlToMarkdown(html: string): string {
   return nodeToMd(div).trim();
 }
 
+export function markdownToEditorHtml(md: string): string {
+  const lines = md.replace(/\r\n/g, "\n").split("\n");
+  const at = (n: number): string => lines[n] ?? "";
+  const out: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = at(i);
+
+    if (line.trim() === "") { i++; continue; }
+
+    if (line.startsWith("```")) {
+      const buf: string[] = [];
+      i++;
+      while (i < lines.length && !at(i).startsWith("```")) { buf.push(at(i)); i++; }
+      if (i < lines.length) i++;
+      out.push(`<pre><code>${escapeHtml(buf.join("\n"))}</code></pre>`);
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,3}) (.*)$/);
+    if (heading) {
+      const level = heading[1]!.length;
+      out.push(`<h${level}>${inlineMd(heading[2]!)}</h${level}>`);
+      i++;
+      continue;
+    }
+
+    if (/^(---|\*\*\*|___)\s*$/.test(line)) {
+      out.push("<hr>");
+      i++;
+      continue;
+    }
+
+    if (line.startsWith("> ")) {
+      const buf: string[] = [];
+      while (i < lines.length && at(i).startsWith("> ")) {
+        buf.push(at(i).slice(2));
+        i++;
+      }
+      out.push(`<blockquote><p>${buf.map(inlineMd).join("<br>")}</p></blockquote>`);
+      continue;
+    }
+
+    if (/^- \[[ xX]\] /.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^- \[[ xX]\] /.test(at(i))) {
+        const cur = at(i);
+        const checked = /^- \[[xX]\] /.test(cur);
+        const text = cur.replace(/^- \[[ xX]\] /, "");
+        items.push(`<li data-type="taskItem" data-checked="${checked}"><label><input type="checkbox"${checked ? " checked" : ""}><span></span></label><div><p>${inlineMd(text)}</p></div></li>`);
+        i++;
+      }
+      out.push(`<ul data-type="taskList">${items.join("")}</ul>`);
+      continue;
+    }
+
+    if (/^[-*] /.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^[-*] /.test(at(i))) {
+        items.push(`<li><p>${inlineMd(at(i).slice(2))}</p></li>`);
+        i++;
+      }
+      out.push(`<ul>${items.join("")}</ul>`);
+      continue;
+    }
+
+    if (/^\d+\. /.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\d+\. /.test(at(i))) {
+        items.push(`<li><p>${inlineMd(at(i).replace(/^\d+\. /, ""))}</p></li>`);
+        i++;
+      }
+      out.push(`<ol>${items.join("")}</ol>`);
+      continue;
+    }
+
+    const buf: string[] = [line];
+    i++;
+    while (i < lines.length && at(i).trim() !== "" && !isBlockStart(at(i))) {
+      buf.push(at(i));
+      i++;
+    }
+    out.push(`<p>${buf.map(inlineMd).join("<br>")}</p>`);
+  }
+
+  return out.join("");
+}
+
+function isBlockStart(line: string): boolean {
+  return /^#{1,3} /.test(line)
+    || line.startsWith("```")
+    || line.startsWith("> ")
+    || /^[-*] /.test(line)
+    || /^\d+\. /.test(line)
+    || /^(---|\*\*\*|___)\s*$/.test(line);
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function inlineMd(s: string): string {
+  let t = escapeHtml(s);
+  t = t.replace(/`([^`]+)`/g, "<code>$1</code>");
+  t = t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  t = t.replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>");
+  t = t.replace(/~~([^~]+)~~/g, "<s>$1</s>");
+  t = t.replace(/==([^=]+)==/g, "<mark>$1</mark>");
+  t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  return t;
+}
+
 function nodeToMd(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
 

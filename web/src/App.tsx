@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   type Note,
   type View,
@@ -10,7 +10,7 @@ import {
   createNote as makeNote,
   TEMPLATES,
 } from "./notes.ts";
-import { BlockEditor, editorHtmlToMarkdown } from "./components/BlockEditor.tsx";
+import { BlockEditor, editorHtmlToMarkdown, markdownToEditorHtml } from "./components/BlockEditor.tsx";
 
 const PAGE_ICONS = ["", "\u{1F4DD}", "\u{1F4CB}", "\u{1F4DA}", "\u{1F680}", "\u{2B50}", "\u{1F3AF}", "\u{1F4A1}", "\u{1F5C2}", "\u{1F30D}", "\u{2764}", "\u{1F525}"];
 
@@ -266,6 +266,201 @@ function TemplatePicker({ onPick }: { onPick: (key: string | null) => void }) {
   );
 }
 
+// ── Quick Switcher ─────────────────────────────────────────────────────
+
+interface QuickSwitcherProps {
+  query: string;
+  setQuery: (q: string) => void;
+  candidates: Note[];
+  index: number;
+  setIndex: (i: number) => void;
+  onPick: (id: string) => void;
+  onClose: () => void;
+  pathOf: (n: Note) => string;
+}
+
+function QuickSwitcher({
+  query,
+  setQuery,
+  candidates,
+  index,
+  setIndex,
+  onPick,
+  onClose,
+  pathOf,
+}: QuickSwitcherProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-qs-row="${index}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [index]);
+
+  function handleKey(e: ReactKeyboardEvent) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (candidates.length > 0) setIndex((index + 1) % candidates.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (candidates.length > 0) setIndex((index - 1 + candidates.length) % candidates.length);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const pick = candidates[index];
+      if (pick) onPick(pick.id);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      onClose();
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.35)",
+        backdropFilter: "blur(2px)",
+        zIndex: 100,
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        paddingTop: "10vh",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "min(36rem, calc(100vw - 2rem))",
+          background: "var(--color-bg)",
+          border: "1px solid var(--color-line)",
+          borderRadius: "0.625rem",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          maxHeight: "70vh",
+        }}
+      >
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setIndex(0);
+          }}
+          onKeyDown={handleKey}
+          placeholder="Jump to page..."
+          style={{
+            border: "none",
+            outline: "none",
+            background: "transparent",
+            padding: "0.875rem 1rem",
+            fontSize: "0.9375rem",
+            color: "var(--color-ink)",
+            borderBottom: "1px solid var(--color-line)",
+          }}
+        />
+        <div ref={listRef} style={{ overflowY: "auto", flex: 1 }}>
+          {candidates.length === 0 ? (
+            <div
+              style={{
+                padding: "1.5rem 1rem",
+                color: "var(--color-muted)",
+                fontSize: "0.875rem",
+                textAlign: "center",
+              }}
+            >
+              No matches
+            </div>
+          ) : (
+            candidates.map((n, i) => {
+              const path = pathOf(n);
+              return (
+                <div
+                  key={n.id}
+                  data-qs-row={i}
+                  onMouseEnter={() => setIndex(i)}
+                  onClick={() => onPick(n.id)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.625rem",
+                    padding: "0.5rem 0.875rem",
+                    background: i === index ? "var(--color-panel)" : "transparent",
+                    cursor: "pointer",
+                    borderLeft:
+                      i === index
+                        ? "3px solid var(--color-accent)"
+                        : "3px solid transparent",
+                  }}
+                >
+                  <span style={{ fontSize: "1rem", width: "1.25rem", textAlign: "center" }}>
+                    {n.icon || "\u{1F4C4}"}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: "0.875rem",
+                        color: "var(--color-ink)",
+                        fontWeight: 500,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {n.title || "Untitled"}
+                    </div>
+                    {path && (
+                      <div
+                        style={{
+                          fontSize: "0.6875rem",
+                          color: "var(--color-muted)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {path}
+                      </div>
+                    )}
+                  </div>
+                  {n.pinned && (
+                    <span style={{ fontSize: "0.6875rem", color: "var(--color-muted)" }}>
+                      pinned
+                    </span>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+        <div
+          style={{
+            padding: "0.375rem 0.875rem",
+            borderTop: "1px solid var(--color-line)",
+            fontSize: "0.6875rem",
+            color: "var(--color-muted)",
+            display: "flex",
+            gap: "1rem",
+          }}
+        >
+          <span>↑↓ navigate</span>
+          <span>↵ open</span>
+          <span>esc close</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── App ────────────────────────────────────────────────────────────────
 
 export function App() {
@@ -276,6 +471,9 @@ export function App() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [pendingParent, setPendingParent] = useState<string | null>(null);
+  const [qsOpen, setQsOpen] = useState(false);
+  const [qsQuery, setQsQuery] = useState("");
+  const [qsIndex, setQsIndex] = useState(0);
   const titleRef = useRef<HTMLInputElement>(null);
   const vh = useViewportHeight();
 
@@ -385,6 +583,63 @@ export function App() {
     setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)));
   }, []);
 
+  const duplicateNote = useCallback(
+    (note: Note) => {
+      const now = Date.now();
+      const dup: Note = {
+        ...note,
+        id: crypto.randomUUID(),
+        title: note.title ? `${note.title} (copy)` : "",
+        createdAt: now,
+        updatedAt: now,
+      };
+      setNotes((prev) => [dup, ...prev]);
+      setView({ kind: "editor", noteId: dup.id });
+    },
+    [],
+  );
+
+  const importMarkdown = useCallback(() => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".md,.markdown,.txt";
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = reader.result as string;
+        const lines = text.split("\n");
+        let title = "";
+        let bodyStart = 0;
+        if (lines[0]?.startsWith("# ")) {
+          title = lines[0].slice(2).trim();
+          bodyStart = 1;
+          while (lines[bodyStart] === "") bodyStart++;
+        }
+        const bodyMd = lines.slice(bodyStart).join("\n");
+        const bodyHtml = markdownToEditorHtml(bodyMd);
+        const now = Date.now();
+        const note: Note = {
+          id: crypto.randomUUID(),
+          parentId: null,
+          title,
+          body: bodyHtml,
+          pinned: false,
+          tags: [],
+          icon: "",
+          template: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        setNotes((prev) => [note, ...prev]);
+        setView({ kind: "editor", noteId: note.id });
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }, []);
+
   const addTag = useCallback((id: string, raw: string) => {
     const newTags = raw
       .split(",")
@@ -415,6 +670,62 @@ export function App() {
     setShowTemplates(false);
   }, []);
 
+  const notePath = useCallback(
+    (note: Note): string => {
+      const parts: string[] = [];
+      let cur: Note | undefined = note;
+      const seen = new Set<string>();
+      while (cur?.parentId && !seen.has(cur.id)) {
+        seen.add(cur.id);
+        const parent = notes.find((n) => n.id === cur!.parentId);
+        if (!parent) break;
+        parts.unshift(parent.title || "Untitled");
+        cur = parent;
+      }
+      return parts.join(" / ");
+    },
+    [notes],
+  );
+
+  const qsCandidates = useMemo<Note[]>(() => {
+    const q = qsQuery.trim().toLowerCase();
+    if (!q) {
+      return [...notes]
+        .sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+          return b.updatedAt - a.updatedAt;
+        })
+        .slice(0, 12);
+    }
+    const scored: { note: Note; score: number }[] = [];
+    for (const n of notes) {
+      const title = (n.title || "untitled").toLowerCase();
+      const tags = n.tags.join(" ").toLowerCase();
+      let score = 0;
+      if (title === q) score += 100;
+      else if (title.startsWith(q)) score += 50;
+      else if (title.includes(q)) score += 25;
+      if (tags.includes(q)) score += 10;
+      if (n.body.toLowerCase().includes(q)) score += 1;
+      if (score > 0) scored.push({ note: n, score });
+    }
+    scored.sort((a, b) => b.score - a.score || b.note.updatedAt - a.note.updatedAt);
+    return scored.slice(0, 20).map((s) => s.note);
+  }, [notes, qsQuery]);
+
+  useEffect(() => {
+    if (qsIndex >= qsCandidates.length) setQsIndex(0);
+  }, [qsCandidates, qsIndex]);
+
+  const openFromSwitcher = useCallback(
+    (id: string) => {
+      setQsOpen(false);
+      setQsQuery("");
+      openNote(id);
+    },
+    [openNote],
+  );
+
   const goBack = useCallback(() => {
     setNotes((prev) => prev.filter((n) => n.title || n.body));
     setView({ kind: "list" });
@@ -434,6 +745,8 @@ export function App() {
   activeNoteIdRef.current = activeNoteId;
   const searchRef = useRef(search);
   searchRef.current = search;
+  const qsOpenRef = useRef(qsOpen);
+  qsOpenRef.current = qsOpen;
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -441,6 +754,14 @@ export function App() {
       const inInput =
         e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
 
+      if (meta && (e.key === "k" || e.key === "p")) {
+        e.preventDefault();
+        setQsQuery("");
+        setQsIndex(0);
+        setQsOpen(true);
+        return;
+      }
+      if (qsOpenRef.current) return;
       if (meta && e.key === "n") {
         e.preventDefault();
         createQuickNote();
@@ -498,6 +819,26 @@ export function App() {
               fontFamily: "var(--font-body)",
             }}
           />
+          <button
+            onClick={() => {
+              setQsQuery("");
+              setQsIndex(0);
+              setQsOpen(true);
+            }}
+            className="hidden md:flex"
+            title="Quick switch (⌘K)"
+            style={{
+              ...btnBase,
+              background: "transparent",
+              border: "1px solid var(--color-line)",
+              color: "var(--color-muted)",
+              padding: "0.25rem 0.5rem",
+              fontSize: "0.6875rem",
+              fontFamily: "var(--font-mono, ui-monospace, monospace)",
+            }}
+          >
+            ⌘K
+          </button>
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "0.25rem 0" }}>
@@ -561,12 +902,12 @@ export function App() {
           )}
         </div>
 
-        <div style={{ padding: "0.5rem", borderTop: "1px solid var(--color-line)" }}>
+        <div style={{ padding: "0.5rem", borderTop: "1px solid var(--color-line)", display: "flex", gap: "0.375rem" }}>
           <button
             onClick={() => startCreateNote(null)}
             style={{
               ...btnBase,
-              width: "100%",
+              flex: 1,
               background: "var(--color-accent)",
               color: "#fff",
               padding: "0.5rem",
@@ -575,6 +916,20 @@ export function App() {
             }}
           >
             + New Page
+          </button>
+          <button
+            onClick={importMarkdown}
+            style={{
+              ...btnBase,
+              background: "transparent",
+              border: "1px solid var(--color-line)",
+              color: "var(--color-muted)",
+              padding: "0.5rem 0.625rem",
+              fontSize: "0.8125rem",
+            }}
+            title="Import a Markdown file"
+          >
+            Import
           </button>
         </div>
       </div>
@@ -733,6 +1088,22 @@ export function App() {
             </div>
           )}
         </div>
+        <button
+          onClick={() => duplicateNote(activeNote)}
+          className="hidden md:flex"
+          style={btnGhost}
+          title="Duplicate page"
+        >
+          Duplicate
+        </button>
+        <button
+          onClick={() => duplicateNote(activeNote)}
+          className="flex md:hidden"
+          style={btnGhostMobile}
+          title="Duplicate page"
+        >
+          Copy
+        </button>
         <button
           onClick={() => exportMarkdown(activeNote)}
           className="hidden md:flex"
@@ -939,6 +1310,18 @@ export function App() {
 
   return (
     <>
+      {qsOpen && (
+        <QuickSwitcher
+          query={qsQuery}
+          setQuery={setQsQuery}
+          candidates={qsCandidates}
+          index={qsIndex}
+          setIndex={setQsIndex}
+          onPick={openFromSwitcher}
+          onClose={() => setQsOpen(false)}
+          pathOf={notePath}
+        />
+      )}
       {/* Desktop */}
       <div className="hidden md:flex" style={{ height: "100dvh" }}>
         <aside
