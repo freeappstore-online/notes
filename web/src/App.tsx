@@ -10,7 +10,9 @@ import {
   createNote as makeNote,
   TEMPLATES,
 } from "./notes.ts";
-import { BlockEditor } from "./components/BlockEditor.tsx";
+import { BlockEditor, editorHtmlToMarkdown } from "./components/BlockEditor.tsx";
+
+const PAGE_ICONS = ["", "\u{1F4DD}", "\u{1F4CB}", "\u{1F4DA}", "\u{1F680}", "\u{2B50}", "\u{1F3AF}", "\u{1F4A1}", "\u{1F5C2}", "\u{1F30D}", "\u{2764}", "\u{1F525}"];
 
 function useDebouncedEffect(fn: () => void, deps: unknown[], ms: number) {
   useEffect(() => {
@@ -272,6 +274,7 @@ export function App() {
   const [search, setSearch] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showIconPicker, setShowIconPicker] = useState(false);
   const [pendingParent, setPendingParent] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const vh = useViewportHeight();
@@ -346,6 +349,24 @@ export function App() {
       prev.map((n) => (n.id === id ? { ...n, body, updatedAt: Date.now() } : n)),
     );
   }, []);
+
+  const setIcon = useCallback((id: string, icon: string) => {
+    setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, icon } : n)));
+  }, []);
+
+  const exportMarkdown = useCallback(
+    (note: Note) => {
+      const md = `# ${note.title || "Untitled"}\n\n${editorHtmlToMarkdown(note.body)}`;
+      const blob = new Blob([md], { type: "text/markdown" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${(note.title || "untitled").replace(/[^a-zA-Z0-9-_ ]/g, "").trim()}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    [],
+  );
 
   const deleteNote = useCallback((id: string) => {
     setNotes((prev) => {
@@ -647,6 +668,86 @@ export function App() {
           }}
         >
           {activeNote.pinned ? "Pinned" : "Pin"}
+        </button>
+        <div style={{ position: "relative" }}>
+          <button
+            onClick={() => setShowIconPicker((p) => !p)}
+            className="hidden md:flex"
+            style={btnGhost}
+            title="Page icon"
+          >
+            {activeNote.icon || "Icon"}
+          </button>
+          <button
+            onClick={() => setShowIconPicker((p) => !p)}
+            className="flex md:hidden"
+            style={btnGhostMobile}
+            title="Page icon"
+          >
+            {activeNote.icon || "Icon"}
+          </button>
+          {showIconPicker && (
+            <div
+              style={{
+                position: "absolute",
+                top: "100%",
+                right: 0,
+                marginTop: "0.25rem",
+                background: "var(--color-paper)",
+                border: "1px solid var(--color-line)",
+                borderRadius: "0.5rem",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                padding: "0.5rem",
+                zIndex: 50,
+                display: "grid",
+                gridTemplateColumns: "repeat(4, 1fr)",
+                gap: "0.25rem",
+                minWidth: "160px",
+              }}
+            >
+              {PAGE_ICONS.map((icon) => (
+                <button
+                  key={icon || "none"}
+                  onClick={() => {
+                    setIcon(activeNote.id, icon);
+                    setShowIconPicker(false);
+                  }}
+                  style={{
+                    ...btnBase,
+                    background: activeNote.icon === icon ? "var(--color-panel)" : "transparent",
+                    border: "1px solid transparent",
+                    borderRadius: "0.375rem",
+                    padding: "0.375rem",
+                    fontSize: icon ? "1.125rem" : "0.625rem",
+                    color: "var(--color-muted)",
+                    minWidth: "2rem",
+                    minHeight: "2rem",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {icon || "none"}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <button
+          onClick={() => exportMarkdown(activeNote)}
+          className="hidden md:flex"
+          style={btnGhost}
+          title="Export as Markdown"
+        >
+          Export
+        </button>
+        <button
+          onClick={() => exportMarkdown(activeNote)}
+          className="flex md:hidden"
+          style={btnGhostMobile}
+          title="Export as Markdown"
+        >
+          Export
         </button>
         <button
           onClick={() => deleteNote(activeNote.id)}
