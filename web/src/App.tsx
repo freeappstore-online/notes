@@ -1,77 +1,33 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { marked } from "marked";
+import {
+  type Note,
+  type View,
+  loadNotes,
+  saveNotes,
+  formatTime,
+  filterAndSort,
+  createNote as makeNote,
+} from "./notes.ts";
 
 marked.setOptions({ breaks: true, gfm: true });
 
-// ── Types ──────────────────────────────────────────────────────────────
-
-interface Note {
-  id: string;
-  title: string;
-  body: string;
-  pinned: boolean;
-  tags: string[];
-  createdAt: number;
-  updatedAt: number;
-}
-
-type View = { kind: "list" } | { kind: "editor"; noteId: string };
-
-// ── Persistence ────────────────────────────────────────────────────────
-
-const STORAGE_KEY = "notes_data";
-
-function migrateNote(n: Record<string, unknown>): Note {
-  return {
-    id: (n.id as string) ?? crypto.randomUUID(),
-    title: (n.title as string) ?? "",
-    body: (n.body as string) ?? "",
-    pinned: (n.pinned as boolean) ?? false,
-    tags: Array.isArray(n.tags) ? (n.tags as string[]) : [],
-    createdAt: (n.createdAt as number) ?? Date.now(),
-    updatedAt: (n.updatedAt as number) ?? Date.now(),
-  };
-}
-
-function loadNotes(): Note[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Record<string, unknown>[]).map(migrateNote) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveNotes(notes: Note[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────
-
-function formatTime(ts: number): string {
-  const d = new Date(ts);
-  const now = new Date();
-  const sameDay =
-    d.getDate() === now.getDate() &&
-    d.getMonth() === now.getMonth() &&
-    d.getFullYear() === now.getFullYear();
-  if (sameDay) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  return d.toLocaleDateString([], { month: "short", day: "numeric" });
-}
+// ── Hooks ─────────────────────────────────────────────────────────────
 
 function useViewportHeight() {
-  const [vh, setVh] = useState<string>("100dvh");
+  const [vh, setVh] = useState<string | null>(null);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
     function update() {
-      setVh(`${vv!.height}px`);
+      const fullHeight = window.innerHeight;
+      const keyboardOpen = vv!.height < fullHeight * 0.85;
+      setVh(keyboardOpen ? `${vv!.height}px` : null);
     }
-    update();
     vv.addEventListener("resize", update);
     return () => vv.removeEventListener("resize", update);
   }, []);
-  return vh;
+  return vh ?? "100dvh";
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────
@@ -140,14 +96,14 @@ function SwipeableNoteItem({
   const [offsetX, setOffsetX] = useState(0);
   const startX = useRef(0);
   const startY = useRef(0);
-  const locked = useRef(false);
+  const locked = useRef<"vertical" | "horizontal" | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     const touch = e.touches[0];
     if (!touch) return;
     startX.current = touch.clientX;
     startY.current = touch.clientY;
-    locked.current = false;
+    locked.current = null;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -155,10 +111,10 @@ function SwipeableNoteItem({
     if (!touch) return;
     const dx = touch.clientX - startX.current;
     const dy = touch.clientY - startY.current;
-    if (!locked.current && Math.abs(dy) > Math.abs(dx)) {
-      locked.current = true;
+    if (locked.current === null && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+      locked.current = Math.abs(dy) > Math.abs(dx) ? "vertical" : "horizontal";
     }
-    if (!locked.current && dx < 0) {
+    if (locked.current === "horizontal" && dx < 0) {
       setOffsetX(Math.max(dx, -100));
     }
   };
@@ -168,6 +124,7 @@ function SwipeableNoteItem({
       onDelete();
     }
     setOffsetX(0);
+    locked.current = null;
   };
 
   return (
@@ -215,7 +172,7 @@ function SwipeableNoteItem({
   );
 }
 
-function NoteItemContent({ note, isActive: _ }: { note: Note; isActive: boolean }) {
+function NoteItemContent({ note }: { note: Note; isActive: boolean }) {
   return (
     <>
       <div
@@ -292,32 +249,10 @@ export function App() {
   const activeNote =
     view.kind === "editor" ? (notes.find((n) => n.id === view.noteId) ?? null) : null;
 
-  const filtered = notes
-    .filter((n) => {
-      if (!search) return true;
-      const q = search.toLowerCase();
-      return (
-        n.title.toLowerCase().includes(q) ||
-        n.body.toLowerCase().includes(q) ||
-        n.tags.some((t) => t.toLowerCase().includes(q))
-      );
-    })
-    .sort((a, b) => {
-      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-      return b.updatedAt - a.updatedAt;
-    });
+  const filtered = filterAndSort(notes, search);
 
   const createNote = useCallback(() => {
-    const now = Date.now();
-    const note: Note = {
-      id: crypto.randomUUID(),
-      title: "",
-      body: "",
-      pinned: false,
-      tags: [],
-      createdAt: now,
-      updatedAt: now,
-    };
+    const note = makeNote();
     setNotes((prev) => [note, ...prev]);
     setView({ kind: "editor", noteId: note.id });
     setSearch("");
@@ -337,15 +272,10 @@ export function App() {
     );
   }, []);
 
-  const deleteNote = useCallback(
-    (id: string) => {
-      setNotes((prev) => prev.filter((n) => n.id !== id));
-      if (view.kind === "editor" && view.noteId === id) {
-        setView({ kind: "list" });
-      }
-    },
-    [view],
-  );
+  const deleteNote = useCallback((id: string) => {
+    setNotes((prev) => prev.filter((n) => n.id !== id));
+    setView((prev) => (prev.kind === "editor" && prev.noteId === id ? { kind: "list" } : prev));
+  }, []);
 
   const togglePin = useCallback((id: string) => {
     setNotes((prev) =>
@@ -687,7 +617,7 @@ export function App() {
             background: "transparent",
             border: "none",
             outline: "none",
-            fontSize: "0.8125rem",
+            fontSize: "1rem",
             color: "var(--color-muted)",
             fontFamily: "var(--font-body)",
             padding: "0.25rem 0",
@@ -719,7 +649,9 @@ export function App() {
           </h1>
           <div
             className="markdown-body"
-            dangerouslySetInnerHTML={{ __html: marked.parse(activeNote.body) as string }}
+            dangerouslySetInnerHTML={{
+              __html: marked.parse(activeNote.body, { async: false }) as string,
+            }}
           />
         </div>
       ) : (

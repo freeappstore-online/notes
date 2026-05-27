@@ -13,7 +13,7 @@
   "scripts": {
     "dev": "pnpm --filter @freenotesapp/web dev",
     "build": "pnpm --filter @freenotesapp/web build",
-    "test": "pnpm --filter @notes/web exec tsc -b"
+    "test": "pnpm --filter @freenotesapp/web test"
   },
   "repository": {
     "type": "git",
