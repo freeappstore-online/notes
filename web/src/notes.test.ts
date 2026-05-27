@@ -16,10 +16,13 @@ describe("migrateNote", () => {
   it("passes through a complete note unchanged", () => {
     const input = {
       id: "abc",
+      parentId: null,
       title: "Hello",
       body: "World",
       pinned: true,
       tags: ["work"],
+      icon: "",
+      template: null,
       createdAt: 1000,
       updatedAt: 2000,
     };
@@ -80,10 +83,13 @@ describe("loadNotes / saveNotes", () => {
     const notes: Note[] = [
       {
         id: "1",
+        parentId: null,
         title: "Test",
         body: "Body",
         pinned: false,
         tags: ["a"],
+        icon: "",
+        template: null,
         createdAt: 100,
         updatedAt: 200,
       },
@@ -130,10 +136,13 @@ describe("formatTime", () => {
 describe("filterAndSort", () => {
   const base: Note = {
     id: "1",
+    parentId: null,
     title: "",
     body: "",
     pinned: false,
     tags: [],
+    icon: "",
+    template: null,
     createdAt: 100,
     updatedAt: 100,
   };

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { marked } from "marked";
 import {
   type Note,
   type View,
@@ -7,10 +6,11 @@ import {
   saveNotes,
   formatTime,
   filterAndSort,
+  getChildren,
   createNote as makeNote,
+  TEMPLATES,
 } from "./notes.ts";
-
-marked.setOptions({ breaks: true, gfm: true });
+import { BlockEditor } from "./components/BlockEditor.tsx";
 
 function useDebouncedEffect(fn: () => void, deps: unknown[], ms: number) {
   useEffect(() => {
@@ -19,8 +19,6 @@ function useDebouncedEffect(fn: () => void, deps: unknown[], ms: number) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 }
-
-// ── Hooks ─────────────────────────────────────────────────────────────
 
 function useViewportHeight() {
   const [vh, setVh] = useState<string | null>(null);
@@ -88,153 +86,181 @@ const tagPill: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-// ── Swipeable Note Item ───────────────────────────────────────────────
+// ── Page Tree Item ────────────────────────────────────────────────────
 
-function SwipeableNoteItem({
+function PageTreeItem({
   note,
-  isActive,
+  notes,
+  activeId,
+  depth,
   onOpen,
-  onDelete,
+  onCreateChild,
 }: {
   note: Note;
-  isActive: boolean;
-  onOpen: () => void;
-  onDelete: () => void;
+  notes: Note[];
+  activeId: string | null;
+  depth: number;
+  onOpen: (id: string) => void;
+  onCreateChild: (parentId: string) => void;
 }) {
-  const [offsetX, setOffsetX] = useState(0);
-  const startX = useRef(0);
-  const startY = useRef(0);
-  const locked = useRef<"vertical" | "horizontal" | null>(null);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    const touch = e.touches[0];
-    if (!touch) return;
-    startX.current = touch.clientX;
-    startY.current = touch.clientY;
-    locked.current = null;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    const touch = e.touches[0];
-    if (!touch) return;
-    const dx = touch.clientX - startX.current;
-    const dy = touch.clientY - startY.current;
-    if (locked.current === null && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
-      locked.current = Math.abs(dy) > Math.abs(dx) ? "vertical" : "horizontal";
-    }
-    if (locked.current === "horizontal" && dx < 0) {
-      setOffsetX(Math.max(dx, -100));
-    }
-  };
-
-  const handleTouchEnd = () => {
-    if (offsetX < -60) {
-      onDelete();
-    }
-    setOffsetX(0);
-    locked.current = null;
-  };
+  const [expanded, setExpanded] = useState(true);
+  const children = getChildren(notes, note.id);
+  const hasChildren = children.length > 0;
+  const isActive = note.id === activeId;
 
   return (
-    <div style={{ position: "relative", overflow: "hidden" }}>
+    <div>
       <div
         style={{
-          position: "absolute",
-          right: 0,
-          top: 0,
-          bottom: 0,
-          width: "100px",
-          background: "#d94040",
           display: "flex",
           alignItems: "center",
-          justifyContent: "center",
-          color: "#fff",
-          fontSize: "0.8125rem",
-          fontWeight: 600,
-          fontFamily: "var(--font-body)",
-        }}
-      >
-        Delete
-      </div>
-      <div
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onClick={() => offsetX === 0 && onOpen()}
-        style={{
-          position: "relative",
-          transform: `translateX(${offsetX}px)`,
-          transition: offsetX === 0 ? "transform 0.2s ease" : "none",
-          background: "var(--color-paper)",
-          padding: "0.875rem 1rem",
-          borderBottom: "1px solid var(--color-line)",
+          gap: "0.25rem",
+          padding: "0.375rem 0.5rem",
+          paddingLeft: `${0.5 + depth * 1}rem`,
+          background: isActive ? "var(--color-paper)" : "transparent",
           cursor: "pointer",
+          borderRadius: "0.375rem",
+          margin: "0.0625rem 0.25rem",
+          fontSize: "0.8125rem",
+          color: "var(--color-ink)",
           fontFamily: "var(--font-body)",
-          textAlign: "left",
-          minHeight: "3.5rem",
+          minHeight: "2rem",
         }}
+        onClick={() => onOpen(note.id)}
       >
-        <NoteItemContent note={note} isActive={isActive} />
+        {hasChildren ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded(!expanded);
+            }}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: 0,
+              fontSize: "0.625rem",
+              color: "var(--color-muted)",
+              width: "1rem",
+              flexShrink: 0,
+              fontFamily: "var(--font-body)",
+            }}
+          >
+            {expanded ? "▼" : "▶"}
+          </button>
+        ) : (
+          <span style={{ width: "1rem", flexShrink: 0 }} />
+        )}
+        {note.pinned && (
+          <span style={{ color: "var(--color-accent)", fontSize: "0.5rem" }}>&#9679;</span>
+        )}
+        <span
+          style={{
+            flex: 1,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            fontWeight: isActive ? 600 : 400,
+          }}
+        >
+          {note.icon ? `${note.icon} ` : ""}
+          {note.title || "Untitled"}
+        </span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onCreateChild(note.id);
+          }}
+          title="Add sub-page"
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "var(--color-muted)",
+            fontSize: "0.875rem",
+            padding: "0 0.25rem",
+            opacity: 0.5,
+            fontFamily: "var(--font-body)",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.5")}
+        >
+          +
+        </button>
       </div>
+      {expanded &&
+        children
+          .sort((a, b) => b.updatedAt - a.updatedAt)
+          .map((child) => (
+            <PageTreeItem
+              key={child.id}
+              note={child}
+              notes={notes}
+              activeId={activeId}
+              depth={depth + 1}
+              onOpen={onOpen}
+              onCreateChild={onCreateChild}
+            />
+          ))}
     </div>
   );
 }
 
-function NoteItemContent({ note }: { note: Note; isActive: boolean }) {
+// ── Template Picker ───────────────────────────────────────────────────
+
+function TemplatePicker({ onPick }: { onPick: (key: string | null) => void }) {
   return (
-    <>
-      <div
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+        gap: "0.75rem",
+        padding: "2rem",
+        maxWidth: "600px",
+        margin: "0 auto",
+      }}
+    >
+      <p
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.375rem",
-          fontSize: "0.9375rem",
-          fontWeight: 500,
+          gridColumn: "1 / -1",
+          fontSize: "1.125rem",
+          fontWeight: 700,
+          fontFamily: "var(--font-display)",
           color: "var(--color-ink)",
+          margin: "0 0 0.5rem",
         }}
       >
-        {note.pinned && (
-          <span style={{ color: "var(--color-accent)", fontSize: "0.75rem", flexShrink: 0 }}>
-            &#9679;
-          </span>
-        )}
-        <span
+        New page
+      </p>
+      {Object.entries(TEMPLATES).map(([key, t]) => (
+        <button
+          key={key}
+          onClick={() => onPick(key === "blank" ? null : key)}
           style={{
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
+            ...btnBase,
+            background: "var(--color-panel)",
+            border: "1px solid var(--color-line)",
+            padding: "1rem",
+            textAlign: "left",
+            borderRadius: "var(--radius-card)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.375rem",
           }}
         >
-          {note.title || "Untitled"}
-        </span>
-      </div>
-      <div
-        style={{
-          fontSize: "0.8125rem",
-          color: "var(--color-muted)",
-          marginTop: "0.125rem",
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-        }}
-      >
-        {formatTime(note.updatedAt)}
-        {note.body && (
-          <span style={{ marginLeft: "0.5rem" }}>
-            {note.body.slice(0, 40).replace(/\n/g, " ")}
+          <span style={{ fontSize: "1.25rem" }}>{t.icon || "\u{1F4DD}"}</span>
+          <span
+            style={{
+              fontSize: "0.8125rem",
+              fontWeight: 600,
+              color: "var(--color-ink)",
+            }}
+          >
+            {t.name}
           </span>
-        )}
-      </div>
-      {note.tags.length > 0 && (
-        <div style={{ display: "flex", gap: "0.25rem", marginTop: "0.375rem", flexWrap: "wrap" }}>
-          {note.tags.map((t) => (
-            <span key={t} style={{ ...tagPill, padding: "0 0.375rem", fontSize: "0.625rem" }}>
-              {t}
-            </span>
-          ))}
-        </div>
-      )}
-    </>
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -244,26 +270,68 @@ export function App() {
   const [notes, setNotes] = useState<Note[]>(loadNotes);
   const [view, setView] = useState<View>({ kind: "list" });
   const [search, setSearch] = useState("");
-  const [preview, setPreview] = useState(false);
   const [tagInput, setTagInput] = useState("");
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [pendingParent, setPendingParent] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
   const vh = useViewportHeight();
 
-  useDebouncedEffect(() => { saveNotes(notes); }, [notes], 300);
+  useDebouncedEffect(
+    () => {
+      saveNotes(notes);
+    },
+    [notes],
+    300,
+  );
 
   const activeNote =
     view.kind === "editor" ? (notes.find((n) => n.id === view.noteId) ?? null) : null;
   const activeNoteId = activeNote?.id ?? null;
 
   const filtered = useMemo(() => filterAndSort(notes, search), [notes, search]);
+  const rootFiltered = useMemo(
+    () => filtered.filter((n) => n.parentId === null),
+    [filtered],
+  );
+  const breadcrumbs = useMemo(() => {
+    if (!activeNote) return [];
+    const trail: Note[] = [];
+    let current: Note | undefined = activeNote;
+    while (current?.parentId) {
+      const parent = notes.find((n) => n.id === current!.parentId);
+      if (!parent) break;
+      trail.unshift(parent);
+      current = parent;
+    }
+    return trail;
+  }, [activeNote, notes]);
 
-  const createNote = useCallback(() => {
-    const note = makeNote();
+  const startCreateNote = useCallback(
+    (parentId: string | null = null) => {
+      setPendingParent(parentId);
+      setShowTemplates(true);
+    },
+    [],
+  );
+
+  const finishCreateNote = useCallback(
+    (template: string | null) => {
+      const note = makeNote(pendingParent, template);
+      setNotes((prev) => [note, ...prev]);
+      setView({ kind: "editor", noteId: note.id });
+      setSearch("");
+      setTagInput("");
+      setShowTemplates(false);
+      setPendingParent(null);
+    },
+    [pendingParent],
+  );
+
+  const createQuickNote = useCallback((parentId: string | null = null) => {
+    const note = makeNote(parentId);
     setNotes((prev) => [note, ...prev]);
     setView({ kind: "editor", noteId: note.id });
     setSearch("");
-    setPreview(false);
     setTagInput("");
   }, []);
 
@@ -280,14 +348,20 @@ export function App() {
   }, []);
 
   const deleteNote = useCallback((id: string) => {
-    setNotes((prev) => prev.filter((n) => n.id !== id));
+    setNotes((prev) => {
+      const toRemove = new Set<string>();
+      function collect(noteId: string) {
+        toRemove.add(noteId);
+        prev.filter((n) => n.parentId === noteId).forEach((n) => collect(n.id));
+      }
+      collect(id);
+      return prev.filter((n) => !toRemove.has(n.id));
+    });
     setView((prev) => (prev.kind === "editor" && prev.noteId === id ? { kind: "list" } : prev));
   }, []);
 
   const togglePin = useCallback((id: string) => {
-    setNotes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)),
-    );
+    setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)));
   }, []);
 
   const addTag = useCallback((id: string, raw: string) => {
@@ -316,15 +390,15 @@ export function App() {
 
   const openNote = useCallback((id: string) => {
     setView({ kind: "editor", noteId: id });
-    setPreview(false);
     setTagInput("");
+    setShowTemplates(false);
   }, []);
 
   const goBack = useCallback(() => {
     setNotes((prev) => prev.filter((n) => n.title || n.body));
     setView({ kind: "list" });
-    setPreview(false);
     setTagInput("");
+    setShowTemplates(false);
   }, []);
 
   useEffect(() => {
@@ -348,7 +422,7 @@ export function App() {
 
       if (meta && e.key === "n") {
         e.preventDefault();
-        createNote();
+        createQuickNote();
       }
       if (meta && e.key === "Backspace" && activeNoteIdRef.current) {
         e.preventDefault();
@@ -358,10 +432,6 @@ export function App() {
         e.preventDefault();
         const input = document.querySelector<HTMLInputElement>("[data-search]");
         input?.focus();
-      }
-      if (meta && e.key === "e" && activeNoteIdRef.current) {
-        e.preventDefault();
-        setPreview((p) => !p);
       }
       if (e.key === "Escape" && !inInput) {
         if (searchRef.current) {
@@ -373,11 +443,11 @@ export function App() {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [createNote, deleteNote, goBack]);
+  }, [createQuickNote, deleteNote, goBack]);
 
-  // ── Note list ──────────────────────────────────────────────────────
+  // ── Sidebar page tree ──────────────────────────────────────────────
 
-  function renderNoteList(mobile: boolean) {
+  function renderPageTree() {
     return (
       <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
         <div
@@ -392,97 +462,99 @@ export function App() {
           <input
             type="text"
             data-search
-            placeholder="Search notes..."
+            placeholder="Search..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{
               flex: 1,
-              background: mobile ? "var(--color-panel)" : "var(--color-paper)",
+              background: "var(--color-paper)",
               color: "var(--color-ink)",
               border: "1px solid var(--color-line)",
               borderRadius: "var(--radius-btn)",
-              padding: mobile ? "0.625rem 0.75rem" : "0.375rem 0.75rem",
+              padding: "0.375rem 0.75rem",
               fontSize: "1rem",
               outline: "none",
               fontFamily: "var(--font-body)",
             }}
           />
-          {!mobile && (
-            <button
-              onClick={createNote}
-              title="New note"
-              style={{
-                ...btnBase,
-                width: "2rem",
-                height: "2rem",
-                background: "var(--color-accent)",
-                color: "#fff",
-                fontWeight: 700,
-                fontSize: "1.125rem",
-                lineHeight: 1,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              +
-            </button>
-          )}
         </div>
 
-        <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-          {filtered.length === 0 && (
-            <p
-              style={{
-                color: "var(--color-muted)",
-                fontSize: "0.9375rem",
-                textAlign: "center",
-                padding: mobile ? "3rem 1rem" : "2rem 1rem",
-              }}
-            >
-              {search
-                ? "No matching notes"
-                : mobile
-                  ? "No notes yet — tap + New to start"
-                  : "No notes yet"}
-            </p>
-          )}
-          {mobile
-            ? filtered.map((note) => (
-                <SwipeableNoteItem
-                  key={note.id}
-                  note={note}
-                  isActive={view.kind === "editor" && view.noteId === note.id}
-                  onOpen={() => openNote(note.id)}
-                  onDelete={() => deleteNote(note.id)}
-                />
-              ))
-            : filtered.map((note) => (
-                <button
+        <div style={{ flex: 1, overflowY: "auto", padding: "0.25rem 0" }}>
+          {search ? (
+            filtered.length === 0 ? (
+              <p
+                style={{
+                  color: "var(--color-muted)",
+                  fontSize: "0.8125rem",
+                  textAlign: "center",
+                  padding: "2rem 1rem",
+                }}
+              >
+                No matching pages
+              </p>
+            ) : (
+              filtered.map((note) => (
+                <div
                   key={note.id}
                   onClick={() => openNote(note.id)}
                   style={{
-                    display: "block",
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "0.75rem 1rem",
-                    background:
-                      view.kind === "editor" && view.noteId === note.id
-                        ? "var(--color-paper)"
-                        : "transparent",
-                    border: "none",
-                    borderBlockEnd: "1px solid var(--color-line)",
+                    padding: "0.375rem 0.75rem",
                     cursor: "pointer",
+                    fontSize: "0.8125rem",
+                    color: "var(--color-ink)",
+                    borderRadius: "0.375rem",
+                    margin: "0.0625rem 0.25rem",
+                    background:
+                      note.id === activeNoteId ? "var(--color-paper)" : "transparent",
                     fontFamily: "var(--font-body)",
                   }}
                 >
-                  <NoteItemContent
-                    note={note}
-                    isActive={view.kind === "editor" && view.noteId === note.id}
-                  />
-                </button>
-              ))}
+                  {note.icon ? `${note.icon} ` : ""}
+                  {note.title || "Untitled"}
+                </div>
+              ))
+            )
+          ) : rootFiltered.length === 0 ? (
+            <p
+              style={{
+                color: "var(--color-muted)",
+                fontSize: "0.8125rem",
+                textAlign: "center",
+                padding: "2rem 1rem",
+              }}
+            >
+              No pages yet
+            </p>
+          ) : (
+            rootFiltered.map((note) => (
+              <PageTreeItem
+                key={note.id}
+                note={note}
+                notes={notes}
+                activeId={activeNoteId}
+                depth={0}
+                onOpen={openNote}
+                onCreateChild={createQuickNote}
+              />
+            ))
+          )}
+        </div>
+
+        <div style={{ padding: "0.5rem", borderTop: "1px solid var(--color-line)" }}>
+          <button
+            onClick={() => startCreateNote(null)}
+            style={{
+              ...btnBase,
+              width: "100%",
+              background: "var(--color-accent)",
+              color: "#fff",
+              padding: "0.5rem",
+              fontSize: "0.8125rem",
+              fontWeight: 600,
+            }}
+          >
+            + New Page
+          </button>
         </div>
       </div>
     );
@@ -490,7 +562,11 @@ export function App() {
 
   // ── Editor panel ───────────────────────────────────────────────────
 
-  const editorPanel = activeNote ? (
+  const childNotes = activeNote ? getChildren(notes, activeNote.id) : [];
+
+  const editorPanel = showTemplates ? (
+    <TemplatePicker onPick={finishCreateNote} />
+  ) : activeNote ? (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Toolbar */}
       <div
@@ -503,19 +579,52 @@ export function App() {
           flexShrink: 0,
         }}
       >
-        <button
-          onClick={goBack}
-          className="md:hidden"
-          style={{ ...btnGhostMobile, marginRight: "auto" }}
-        >
+        <button onClick={goBack} className="md:hidden" style={{ ...btnGhostMobile }}>
           Back
         </button>
-        <span
-          className="hidden md:inline"
-          style={{ fontSize: "0.75rem", color: "var(--color-muted)", marginRight: "auto" }}
+
+        {/* Breadcrumbs */}
+        <div
+          className="hidden md:flex"
+          style={{
+            alignItems: "center",
+            gap: "0.25rem",
+            flex: 1,
+            overflow: "hidden",
+            fontSize: "0.75rem",
+            color: "var(--color-muted)",
+          }}
         >
-          {formatTime(activeNote.updatedAt)}
-        </span>
+          {breadcrumbs.map((bc) => (
+            <span key={bc.id} style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+              <button
+                onClick={() => openNote(bc.id)}
+                style={{
+                  ...btnBase,
+                  background: "none",
+                  color: "var(--color-muted)",
+                  padding: "0.125rem 0.25rem",
+                  fontSize: "0.75rem",
+                  textDecoration: "none",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+                onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+              >
+                {bc.title || "Untitled"}
+              </button>
+              <span>/</span>
+            </span>
+          ))}
+          <span style={{ fontWeight: 500, color: "var(--color-ink)" }}>
+            {activeNote.title || "Untitled"}
+          </span>
+          <span style={{ marginLeft: "auto", flexShrink: 0 }}>
+            {formatTime(activeNote.updatedAt)}
+          </span>
+        </div>
+
+        <div style={{ marginLeft: "auto" }} className="md:hidden" />
+
         <button
           onClick={() => togglePin(activeNote.id)}
           title={activeNote.pinned ? "Unpin" : "Pin"}
@@ -530,7 +639,6 @@ export function App() {
         </button>
         <button
           onClick={() => togglePin(activeNote.id)}
-          title={activeNote.pinned ? "Unpin" : "Pin"}
           className="flex md:hidden"
           style={{
             ...btnGhostMobile,
@@ -539,30 +647,6 @@ export function App() {
           }}
         >
           {activeNote.pinned ? "Pinned" : "Pin"}
-        </button>
-        <button
-          onClick={() => setPreview((p) => !p)}
-          title="Toggle preview"
-          className="hidden md:flex"
-          style={{
-            ...btnGhost,
-            color: preview ? "var(--color-accent)" : "var(--color-muted)",
-            borderColor: preview ? "var(--color-accent)" : "var(--color-line)",
-          }}
-        >
-          {preview ? "Edit" : "Preview"}
-        </button>
-        <button
-          onClick={() => setPreview((p) => !p)}
-          title="Toggle preview"
-          className="flex md:hidden"
-          style={{
-            ...btnGhostMobile,
-            color: preview ? "var(--color-accent)" : "var(--color-muted)",
-            borderColor: preview ? "var(--color-accent)" : "var(--color-line)",
-          }}
-        >
-          {preview ? "Edit" : "Preview"}
         </button>
         <button
           onClick={() => deleteNote(activeNote.id)}
@@ -586,10 +670,10 @@ export function App() {
           display: "flex",
           alignItems: "center",
           gap: "0.375rem",
-          padding: "0.5rem 1rem",
+          padding: "0.375rem 1rem",
           flexWrap: "wrap",
           borderBottom: "1px solid var(--color-line)",
-          minHeight: "2.5rem",
+          minHeight: "2rem",
         }}
       >
         {activeNote.tags.map((t) => (
@@ -606,8 +690,8 @@ export function App() {
                 padding: "0.125rem",
                 lineHeight: 1,
                 fontFamily: "var(--font-body)",
-                minWidth: "1.5rem",
-                minHeight: "1.5rem",
+                minWidth: "1.25rem",
+                minHeight: "1.25rem",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -640,90 +724,84 @@ export function App() {
             fontSize: "1rem",
             color: "var(--color-muted)",
             fontFamily: "var(--font-body)",
-            padding: "0.25rem 0",
+            padding: "0.125rem 0",
           }}
         />
       </div>
 
-      {/* Content */}
-      {preview ? (
+      {/* Title */}
+      <input
+        ref={titleRef}
+        value={activeNote.title}
+        onChange={(e) => updateTitle(activeNote.id, e.target.value)}
+        placeholder="Untitled"
+        style={{
+          width: "100%",
+          outline: "none",
+          padding: "1rem 1rem 0.25rem",
+          fontSize: "1.75rem",
+          fontWeight: 800,
+          lineHeight: 1.3,
+          background: "transparent",
+          color: "var(--color-ink)",
+          border: "none",
+          fontFamily: "var(--font-display)",
+          userSelect: "text",
+          WebkitUserSelect: "text",
+          flexShrink: 0,
+        }}
+      />
+
+      {/* Block editor */}
+      <BlockEditor
+        content={activeNote.body}
+        onChange={(html) => updateBody(activeNote.id, html)}
+      />
+
+      {/* Sub-pages */}
+      {childNotes.length > 0 && (
         <div
           style={{
-            flex: 1,
-            overflow: "auto",
-            padding: "1.25rem 1rem",
-            WebkitOverflowScrolling: "touch",
+            borderTop: "1px solid var(--color-line)",
+            padding: "0.75rem 1rem",
+            flexShrink: 0,
           }}
         >
-          <h1
+          <p
             style={{
-              fontSize: "1.25rem",
-              fontWeight: 700,
-              lineHeight: 1.4,
-              margin: "0 0 0.75rem",
-              fontFamily: "var(--font-body)",
-              color: "var(--color-ink)",
+              fontSize: "0.6875rem",
+              color: "var(--color-muted)",
+              marginBottom: "0.375rem",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              fontWeight: 600,
             }}
           >
-            {activeNote.title || "Untitled"}
-          </h1>
-          <div
-            className="markdown-body"
-            dangerouslySetInnerHTML={{
-              __html: marked.parse(activeNote.body, { async: false }) as string,
-            }}
-          />
+            Sub-pages
+          </p>
+          {childNotes.map((child) => (
+            <button
+              key={child.id}
+              onClick={() => openNote(child.id)}
+              style={{
+                ...btnBase,
+                display: "block",
+                width: "100%",
+                textAlign: "left",
+                background: "var(--color-panel)",
+                border: "1px solid var(--color-line)",
+                borderRadius: "0.5rem",
+                padding: "0.5rem 0.75rem",
+                marginBottom: "0.375rem",
+                fontSize: "0.8125rem",
+                color: "var(--color-ink)",
+              }}
+            >
+              {child.icon ? `${child.icon} ` : ""}
+              {child.title || "Untitled"}
+            </button>
+          ))}
         </div>
-      ) : (
-        <>
-          <input
-            ref={titleRef}
-            value={activeNote.title}
-            onChange={(e) => updateTitle(activeNote.id, e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                bodyRef.current?.focus();
-              }
-            }}
-            placeholder="Title"
-            style={{
-              width: "100%",
-              outline: "none",
-              padding: "1rem 1rem 0.25rem",
-              fontSize: "1.25rem",
-              fontWeight: 700,
-              lineHeight: 1.4,
-              background: "transparent",
-              color: "var(--color-ink)",
-              border: "none",
-              fontFamily: "var(--font-body)",
-              userSelect: "text",
-              WebkitUserSelect: "text",
-            }}
-          />
-          <textarea
-            ref={bodyRef}
-            value={activeNote.body}
-            onChange={(e) => updateBody(activeNote.id, e.target.value)}
-            placeholder="Start writing... (Markdown supported)"
-            style={{
-              flex: 1,
-              width: "100%",
-              resize: "none",
-              outline: "none",
-              padding: "0.25rem 1rem 1rem",
-              fontSize: "1rem",
-              lineHeight: 1.7,
-              background: "transparent",
-              color: "var(--color-ink)",
-              border: "none",
-              fontFamily: "var(--font-body)",
-              userSelect: "text",
-              WebkitUserSelect: "text",
-            }}
-          />
-        </>
       )}
     </div>
   ) : (
@@ -737,10 +815,10 @@ export function App() {
     >
       <div style={{ textAlign: "center" }}>
         <p style={{ color: "var(--color-muted)", fontSize: "1rem", marginBottom: "0.75rem" }}>
-          Select a note or create a new one
+          Select a page or create a new one
         </p>
-        <button onClick={createNote} style={btnPrimary}>
-          New Note
+        <button onClick={() => startCreateNote(null)} style={btnPrimary}>
+          New Page
         </button>
         <p
           style={{
@@ -750,7 +828,7 @@ export function App() {
             lineHeight: 1.6,
           }}
         >
-          Cmd+N new &middot; Cmd+F search &middot; Cmd+E preview
+          Cmd+N quick note &middot; Cmd+F search
         </p>
       </div>
     </div>
@@ -758,117 +836,112 @@ export function App() {
 
   // ── Desktop Layout ─────────────────────────────────────────────────
 
-  const desktopLayout = (
-    <div className="hidden md:flex" style={{ height: "100dvh" }}>
-      <aside
-        style={{
-          width: "17rem",
-          flexShrink: 0,
-          borderRight: "1px solid var(--color-line)",
-          background: "var(--color-panel)",
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-        }}
-      >
-        <div
-          style={{
-            padding: "1.5rem",
-            fontFamily: "var(--font-display)",
-            fontWeight: 700,
-            fontSize: "1.125rem",
-          }}
-        >
-          notes
-        </div>
-        <div style={{ flex: 1, overflow: "hidden" }}>{renderNoteList(false)}</div>
-        <div style={{ padding: "1rem", fontSize: "0.75rem", color: "var(--color-muted)" }}>
-          <a
-            href="https://freeappstore.online"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: "var(--color-muted)", textDecoration: "none" }}
-            onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
-            onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
-          >
-            Part of FreeAppStore — free forever
-          </a>
-        </div>
-      </aside>
-      <main style={{ flex: 1, overflow: "auto" }}>{editorPanel}</main>
-    </div>
-  );
-
-  // ── Mobile Layout ──────────────────────────────────────────────────
-
-  const mobileLayout = (
-    <div className="flex flex-col md:hidden" style={{ height: vh }}>
-      <header
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 1rem",
-          paddingTop: "env(safe-area-inset-top)",
-          minHeight: "3.5rem",
-          borderBottom: "1px solid var(--color-line)",
-          background: "var(--color-panel)",
-          flexShrink: 0,
-        }}
-      >
-        <span style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}>notes</span>
-        {view.kind === "list" && (
-          <button
-            onClick={createNote}
-            style={{
-              ...btnBase,
-              background: "var(--color-accent)",
-              color: "#fff",
-              padding: "0.5rem 1rem",
-              fontSize: "0.9375rem",
-              fontWeight: 600,
-              minHeight: "2.75rem",
-            }}
-          >
-            + New
-          </button>
-        )}
-      </header>
-      <main style={{ flex: 1, overflow: "auto" }}>
-        {view.kind === "list" ? (
-          <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            {renderNoteList(true)}
-            <div
-              style={{
-                padding: "1rem",
-                paddingBottom: "calc(1rem + env(safe-area-inset-bottom))",
-                textAlign: "center",
-                fontSize: "0.75rem",
-                color: "var(--color-muted)",
-                flexShrink: 0,
-              }}
-            >
-              <a
-                href="https://freeappstore.online"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ color: "var(--color-muted)", textDecoration: "none" }}
-              >
-                Part of FreeAppStore — free forever
-              </a>
-            </div>
-          </div>
-        ) : (
-          editorPanel
-        )}
-      </main>
-    </div>
-  );
-
   return (
     <>
-      {desktopLayout}
-      {mobileLayout}
+      {/* Desktop */}
+      <div className="hidden md:flex" style={{ height: "100dvh" }}>
+        <aside
+          style={{
+            width: "17rem",
+            flexShrink: 0,
+            borderRight: "1px solid var(--color-line)",
+            background: "var(--color-panel)",
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+          }}
+        >
+          <div
+            style={{
+              padding: "1.25rem 1rem 0.75rem",
+              fontFamily: "var(--font-display)",
+              fontWeight: 700,
+              fontSize: "1.125rem",
+            }}
+          >
+            notes
+          </div>
+          <div style={{ flex: 1, overflow: "hidden" }}>{renderPageTree()}</div>
+          <div style={{ padding: "0.75rem", fontSize: "0.6875rem", color: "var(--color-muted)" }}>
+            <a
+              href="https://freeappstore.online"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "var(--color-muted)", textDecoration: "none" }}
+              onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+              onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+            >
+              Part of FreeAppStore
+            </a>
+          </div>
+        </aside>
+        <main style={{ flex: 1, overflow: "auto" }}>{editorPanel}</main>
+      </div>
+
+      {/* Mobile */}
+      <div className="flex flex-col md:hidden" style={{ height: vh }}>
+        <header
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "0 1rem",
+            paddingTop: "env(safe-area-inset-top)",
+            minHeight: "3.5rem",
+            borderBottom: "1px solid var(--color-line)",
+            background: "var(--color-panel)",
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}>notes</span>
+          {view.kind === "list" && !showTemplates && (
+            <button
+              onClick={() => startCreateNote(null)}
+              style={{
+                ...btnBase,
+                background: "var(--color-accent)",
+                color: "#fff",
+                padding: "0.5rem 1rem",
+                fontSize: "0.9375rem",
+                fontWeight: 600,
+                minHeight: "2.75rem",
+              }}
+            >
+              + New
+            </button>
+          )}
+        </header>
+        <main style={{ flex: 1, overflow: "auto" }}>
+          {showTemplates ? (
+            <TemplatePicker onPick={finishCreateNote} />
+          ) : view.kind === "list" ? (
+            <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+              {renderPageTree()}
+              <div
+                style={{
+                  padding: "0.75rem",
+                  paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))",
+                  textAlign: "center",
+                  fontSize: "0.6875rem",
+                  color: "var(--color-muted)",
+                  flexShrink: 0,
+                }}
+              >
+                <a
+                  href="https://freeappstore.online"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: "var(--color-muted)", textDecoration: "none" }}
+                >
+                  Part of FreeAppStore
+                </a>
+              </div>
+            </div>
+          ) : (
+            editorPanel
+          )}
+        </main>
+      </div>
     </>
   );
 }

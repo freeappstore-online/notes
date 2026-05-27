@@ -10,30 +10,29 @@ beforeEach(() => {
 });
 
 function flushDebounce() {
-  act(() => { vi.advanceTimersByTime(350); });
+  act(() => {
+    vi.advanceTimersByTime(350);
+  });
 }
 
 describe("App", () => {
   it("renders empty state", () => {
     render(<App />);
-    expect(screen.getAllByText(/No notes yet/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/No pages yet/).length).toBeGreaterThanOrEqual(1);
   });
 
-  it("creates a note and opens editor", async () => {
+  it("creates a note via quick note (Cmd+N) and opens editor", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<App />);
-    await user.click(screen.getAllByText("New Note")[0]!);
-    expect(screen.getAllByPlaceholderText("Title").length).toBeGreaterThanOrEqual(1);
-    expect(
-      screen.getAllByPlaceholderText("Start writing... (Markdown supported)").length,
-    ).toBeGreaterThanOrEqual(1);
+    await user.keyboard("{Meta>}n{/Meta}");
+    expect(screen.getAllByPlaceholderText("Untitled").length).toBeGreaterThanOrEqual(1);
   });
 
   it("persists note title to localStorage after debounce", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<App />);
-    await user.click(screen.getAllByText("New Note")[0]!);
-    const titleInputs = screen.getAllByPlaceholderText("Title");
+    await user.keyboard("{Meta>}n{/Meta}");
+    const titleInputs = screen.getAllByPlaceholderText("Untitled");
     await user.type(titleInputs[0]!, "My First Note");
     flushDebounce();
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
@@ -43,8 +42,8 @@ describe("App", () => {
   it("deletes a note", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<App />);
-    await user.click(screen.getAllByText("New Note")[0]!);
-    const titleInputs = screen.getAllByPlaceholderText("Title");
+    await user.keyboard("{Meta>}n{/Meta}");
+    const titleInputs = screen.getAllByPlaceholderText("Untitled");
     await user.type(titleInputs[0]!, "To Delete");
     const deleteButtons = screen.getAllByText("Delete");
     await user.click(deleteButtons[0]!);
@@ -58,12 +57,12 @@ describe("App", () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify([
-        { id: "1", title: "Groceries", body: "", pinned: false, tags: [], createdAt: 1, updatedAt: 2 },
-        { id: "2", title: "Meeting", body: "", pinned: false, tags: [], createdAt: 1, updatedAt: 1 },
+        { id: "1", parentId: null, title: "Groceries", body: "", pinned: false, tags: [], icon: "", template: null, createdAt: 1, updatedAt: 2 },
+        { id: "2", parentId: null, title: "Meeting", body: "", pinned: false, tags: [], icon: "", template: null, createdAt: 1, updatedAt: 1 },
       ]),
     );
     render(<App />);
-    const searchInputs = screen.getAllByPlaceholderText("Search notes...");
+    const searchInputs = screen.getAllByPlaceholderText("Search...");
     await user.type(searchInputs[0]!, "grocer");
     expect(screen.getAllByText("Groceries").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("Meeting")).not.toBeInTheDocument();
@@ -74,12 +73,12 @@ describe("App", () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify([
-        { id: "1", title: "Test", body: "x", pinned: false, tags: [], createdAt: 1, updatedAt: 42 },
+        { id: "1", parentId: null, title: "Test", body: "x", pinned: false, tags: [], icon: "", template: null, createdAt: 1, updatedAt: 42 },
       ]),
     );
     render(<App />);
-    const noteButtons = screen.getAllByText("Test");
-    await user.click(noteButtons[0]!);
+    const noteItems = screen.getAllByText("Test");
+    await user.click(noteItems[0]!);
     const pinButtons = screen.getAllByText("Pin");
     await user.click(pinButtons[0]!);
     flushDebounce();
@@ -91,7 +90,7 @@ describe("App", () => {
   it("adds a tag to a note", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<App />);
-    await user.click(screen.getAllByText("New Note")[0]!);
+    await user.keyboard("{Meta>}n{/Meta}");
     const tagInputs = screen.getAllByPlaceholderText("Add tags...");
     await user.type(tagInputs[0]!, "work{Enter}");
     flushDebounce();
@@ -102,7 +101,7 @@ describe("App", () => {
   it("splits comma-separated tags", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<App />);
-    await user.click(screen.getAllByText("New Note")[0]!);
+    await user.keyboard("{Meta>}n{/Meta}");
     const tagInputs = screen.getAllByPlaceholderText("Add tags...");
     await user.type(tagInputs[0]!, "work,life,fun{Enter}");
     flushDebounce();
@@ -113,17 +112,17 @@ describe("App", () => {
   it("navigates back to list", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<App />);
-    await user.click(screen.getAllByText("New Note")[0]!);
-    expect(screen.getAllByPlaceholderText("Title").length).toBeGreaterThanOrEqual(1);
+    await user.keyboard("{Meta>}n{/Meta}");
+    expect(screen.getAllByPlaceholderText("Untitled").length).toBeGreaterThanOrEqual(1);
     const backButtons = screen.getAllByText("Back");
     await user.click(backButtons[0]!);
-    expect(screen.queryAllByPlaceholderText("Title")).toHaveLength(0);
+    expect(screen.queryAllByPlaceholderText("Untitled")).toHaveLength(0);
   });
 
   it("cleans up empty notes on navigate back", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<App />);
-    await user.click(screen.getAllByText("New Note")[0]!);
+    await user.keyboard("{Meta>}n{/Meta}");
     const backButtons = screen.getAllByText("Back");
     await user.click(backButtons[0]!);
     flushDebounce();
@@ -134,8 +133,8 @@ describe("App", () => {
   it("keeps non-empty notes on navigate back", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<App />);
-    await user.click(screen.getAllByText("New Note")[0]!);
-    const titleInputs = screen.getAllByPlaceholderText("Title");
+    await user.keyboard("{Meta>}n{/Meta}");
+    const titleInputs = screen.getAllByPlaceholderText("Untitled");
     await user.type(titleInputs[0]!, "Keep me");
     const backButtons = screen.getAllByText("Back");
     await user.click(backButtons[0]!);
@@ -149,7 +148,7 @@ describe("App", () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify([
-        { id: "1", title: "Saved Note", body: "content", pinned: false, tags: [], createdAt: 1, updatedAt: 1 },
+        { id: "1", parentId: null, title: "Saved Note", body: "content", pinned: false, tags: [], icon: "", template: null, createdAt: 1, updatedAt: 1 },
       ]),
     );
     render(<App />);
@@ -161,12 +160,12 @@ describe("App", () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify([
-        { id: "1", title: "A", body: "", pinned: false, tags: ["urgent"], createdAt: 1, updatedAt: 2 },
-        { id: "2", title: "B", body: "", pinned: false, tags: ["low"], createdAt: 1, updatedAt: 1 },
+        { id: "1", parentId: null, title: "A", body: "", pinned: false, tags: ["urgent"], icon: "", template: null, createdAt: 1, updatedAt: 2 },
+        { id: "2", parentId: null, title: "B", body: "", pinned: false, tags: ["low"], icon: "", template: null, createdAt: 1, updatedAt: 1 },
       ]),
     );
     render(<App />);
-    const searchInputs = screen.getAllByPlaceholderText("Search notes...");
+    const searchInputs = screen.getAllByPlaceholderText("Search...");
     await user.type(searchInputs[0]!, "urgent");
     expect(screen.getAllByText("A").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("B")).not.toBeInTheDocument();
@@ -176,8 +175,8 @@ describe("App", () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify([
-        { id: "1", title: "Unpinned", body: "", pinned: false, tags: [], createdAt: 1, updatedAt: 300 },
-        { id: "2", title: "Pinned", body: "", pinned: true, tags: [], createdAt: 1, updatedAt: 100 },
+        { id: "1", parentId: null, title: "Unpinned", body: "", pinned: false, tags: [], icon: "", template: null, createdAt: 1, updatedAt: 300 },
+        { id: "2", parentId: null, title: "Pinned", body: "", pinned: true, tags: [], icon: "", template: null, createdAt: 1, updatedAt: 100 },
       ]),
     );
     render(<App />);
