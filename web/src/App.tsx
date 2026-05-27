@@ -59,6 +59,21 @@ function formatTime(ts: number): string {
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+function useViewportHeight() {
+  const [vh, setVh] = useState<string>("100dvh");
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    function update() {
+      setVh(`${vv!.height}px`);
+    }
+    update();
+    vv.addEventListener("resize", update);
+    return () => vv.removeEventListener("resize", update);
+  }, []);
+  return vh;
+}
+
 // ── Styles ─────────────────────────────────────────────────────────────
 
 const btnBase: React.CSSProperties = {
@@ -84,6 +99,15 @@ const btnGhost: React.CSSProperties = {
   padding: "0.375rem 0.75rem",
   fontSize: "0.75rem",
   border: "1px solid var(--color-line)",
+};
+
+const btnGhostMobile: React.CSSProperties = {
+  ...btnGhost,
+  minHeight: "2.75rem",
+  minWidth: "2.75rem",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 const tagPill: React.CSSProperties = {
@@ -182,6 +206,7 @@ function SwipeableNoteItem({
           cursor: "pointer",
           fontFamily: "var(--font-body)",
           textAlign: "left",
+          minHeight: "3.5rem",
         }}
       >
         <NoteItemContent note={note} isActive={isActive} />
@@ -198,7 +223,7 @@ function NoteItemContent({ note, isActive: _ }: { note: Note; isActive: boolean 
           display: "flex",
           alignItems: "center",
           gap: "0.375rem",
-          fontSize: "0.875rem",
+          fontSize: "0.9375rem",
           fontWeight: 500,
           color: "var(--color-ink)",
         }}
@@ -220,7 +245,7 @@ function NoteItemContent({ note, isActive: _ }: { note: Note; isActive: boolean 
       </div>
       <div
         style={{
-          fontSize: "0.75rem",
+          fontSize: "0.8125rem",
           color: "var(--color-muted)",
           marginTop: "0.125rem",
           whiteSpace: "nowrap",
@@ -258,6 +283,7 @@ export function App() {
   const [tagInput, setTagInput] = useState("");
   const titleRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const vh = useViewportHeight();
 
   useEffect(() => {
     saveNotes(notes);
@@ -425,8 +451,8 @@ export function App() {
               color: "var(--color-ink)",
               border: "1px solid var(--color-line)",
               borderRadius: "var(--radius-btn)",
-              padding: "0.375rem 0.75rem",
-              fontSize: "0.875rem",
+              padding: mobile ? "0.625rem 0.75rem" : "0.375rem 0.75rem",
+              fontSize: "1rem",
               outline: "none",
               fontFamily: "var(--font-body)",
             }}
@@ -455,12 +481,12 @@ export function App() {
           )}
         </div>
 
-        <div style={{ flex: 1, overflowY: "auto" }}>
+        <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
           {filtered.length === 0 && (
             <p
               style={{
                 color: "var(--color-muted)",
-                fontSize: "0.875rem",
+                fontSize: "0.9375rem",
                 textAlign: "center",
                 padding: mobile ? "3rem 1rem" : "2rem 1rem",
               }}
@@ -522,13 +548,16 @@ export function App() {
           display: "flex",
           alignItems: "center",
           gap: "0.5rem",
-          padding: "0.75rem 1.5rem",
+          padding: "0.5rem 1rem",
           borderBottom: "1px solid var(--color-line)",
           flexShrink: 0,
-          flexWrap: "wrap",
         }}
       >
-        <button onClick={goBack} className="md:hidden" style={{ ...btnGhost, marginRight: "auto" }}>
+        <button
+          onClick={goBack}
+          className="md:hidden"
+          style={{ ...btnGhostMobile, marginRight: "auto" }}
+        >
           Back
         </button>
         <span
@@ -540,6 +569,7 @@ export function App() {
         <button
           onClick={() => togglePin(activeNote.id)}
           title={activeNote.pinned ? "Unpin" : "Pin"}
+          className="hidden md:flex"
           style={{
             ...btnGhost,
             color: activeNote.pinned ? "var(--color-accent)" : "var(--color-muted)",
@@ -549,8 +579,21 @@ export function App() {
           {activeNote.pinned ? "Pinned" : "Pin"}
         </button>
         <button
+          onClick={() => togglePin(activeNote.id)}
+          title={activeNote.pinned ? "Unpin" : "Pin"}
+          className="flex md:hidden"
+          style={{
+            ...btnGhostMobile,
+            color: activeNote.pinned ? "var(--color-accent)" : "var(--color-muted)",
+            borderColor: activeNote.pinned ? "var(--color-accent)" : "var(--color-line)",
+          }}
+        >
+          {activeNote.pinned ? "Pinned" : "Pin"}
+        </button>
+        <button
           onClick={() => setPreview((p) => !p)}
-          title="Toggle preview (Cmd+E)"
+          title="Toggle preview"
+          className="hidden md:flex"
           style={{
             ...btnGhost,
             color: preview ? "var(--color-accent)" : "var(--color-muted)",
@@ -559,7 +602,30 @@ export function App() {
         >
           {preview ? "Edit" : "Preview"}
         </button>
-        <button onClick={() => deleteNote(activeNote.id)} style={btnGhost}>
+        <button
+          onClick={() => setPreview((p) => !p)}
+          title="Toggle preview"
+          className="flex md:hidden"
+          style={{
+            ...btnGhostMobile,
+            color: preview ? "var(--color-accent)" : "var(--color-muted)",
+            borderColor: preview ? "var(--color-accent)" : "var(--color-line)",
+          }}
+        >
+          {preview ? "Edit" : "Preview"}
+        </button>
+        <button
+          onClick={() => deleteNote(activeNote.id)}
+          className="hidden md:flex"
+          style={btnGhost}
+        >
+          Delete
+        </button>
+        <button
+          onClick={() => deleteNote(activeNote.id)}
+          className="flex md:hidden"
+          style={btnGhostMobile}
+        >
           Delete
         </button>
       </div>
@@ -570,10 +636,10 @@ export function App() {
           display: "flex",
           alignItems: "center",
           gap: "0.375rem",
-          padding: "0.5rem 1.5rem",
+          padding: "0.5rem 1rem",
           flexWrap: "wrap",
           borderBottom: "1px solid var(--color-line)",
-          minHeight: "2.25rem",
+          minHeight: "2.5rem",
         }}
       >
         {activeNote.tags.map((t) => (
@@ -586,10 +652,15 @@ export function App() {
                 border: "none",
                 cursor: "pointer",
                 color: "var(--color-muted)",
-                fontSize: "0.75rem",
-                padding: 0,
+                fontSize: "0.875rem",
+                padding: "0.125rem",
                 lineHeight: 1,
                 fontFamily: "var(--font-body)",
+                minWidth: "1.5rem",
+                minHeight: "1.5rem",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
               }}
             >
               &times;
@@ -616,17 +687,24 @@ export function App() {
             background: "transparent",
             border: "none",
             outline: "none",
-            fontSize: "0.6875rem",
+            fontSize: "0.8125rem",
             color: "var(--color-muted)",
             fontFamily: "var(--font-body)",
-            padding: "0.125rem 0",
+            padding: "0.25rem 0",
           }}
         />
       </div>
 
       {/* Content */}
       {preview ? (
-        <div style={{ flex: 1, overflow: "auto", padding: "1.5rem" }}>
+        <div
+          style={{
+            flex: 1,
+            overflow: "auto",
+            padding: "1.25rem 1rem",
+            WebkitOverflowScrolling: "touch",
+          }}
+        >
           <h1
             style={{
               fontSize: "1.25rem",
@@ -660,7 +738,7 @@ export function App() {
             style={{
               width: "100%",
               outline: "none",
-              padding: "1.5rem 1.5rem 0.25rem",
+              padding: "1rem 1rem 0.25rem",
               fontSize: "1.25rem",
               fontWeight: 700,
               lineHeight: 1.4,
@@ -682,7 +760,7 @@ export function App() {
               width: "100%",
               resize: "none",
               outline: "none",
-              padding: "0.25rem 1.5rem 1.5rem",
+              padding: "0.25rem 1rem 1rem",
               fontSize: "1rem",
               lineHeight: 1.7,
               background: "transparent",
@@ -729,7 +807,7 @@ export function App() {
   // ── Desktop Layout ─────────────────────────────────────────────────
 
   const desktopLayout = (
-    <div className="hidden md:flex" style={{ height: "100vh" }}>
+    <div className="hidden md:flex" style={{ height: "100dvh" }}>
       <aside
         style={{
           width: "17rem",
@@ -772,14 +850,15 @@ export function App() {
   // ── Mobile Layout ──────────────────────────────────────────────────
 
   const mobileLayout = (
-    <div className="flex flex-col md:hidden" style={{ height: "100vh" }}>
+    <div className="flex flex-col md:hidden" style={{ height: vh }}>
       <header
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           padding: "0 1rem",
-          height: "3.5rem",
+          paddingTop: "env(safe-area-inset-top)",
+          minHeight: "3.5rem",
           borderBottom: "1px solid var(--color-line)",
           background: "var(--color-panel)",
           flexShrink: 0,
@@ -793,9 +872,10 @@ export function App() {
               ...btnBase,
               background: "var(--color-accent)",
               color: "#fff",
-              padding: "0.375rem 0.75rem",
-              fontSize: "0.8125rem",
+              padding: "0.5rem 1rem",
+              fontSize: "0.9375rem",
               fontWeight: 600,
+              minHeight: "2.75rem",
             }}
           >
             + New
@@ -809,6 +889,7 @@ export function App() {
             <div
               style={{
                 padding: "1rem",
+                paddingBottom: "calc(1rem + env(safe-area-inset-bottom))",
                 textAlign: "center",
                 fontSize: "0.75rem",
                 color: "var(--color-muted)",
