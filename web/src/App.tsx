@@ -47,7 +47,7 @@ const btnBase: React.CSSProperties = {
   border: "none",
   borderRadius: "var(--radius-btn)",
   cursor: "pointer",
-  fontFamily: "var(--font-body)",
+  fontFamily: "Manrope, system-ui, sans-serif",
 };
 
 const btnPrimary: React.CSSProperties = {
@@ -87,7 +87,7 @@ const tagPill: React.CSSProperties = {
   background: "var(--color-panel)",
   color: "var(--color-muted)",
   border: "1px solid var(--color-line)",
-  fontFamily: "var(--font-body)",
+  fontFamily: "Manrope, system-ui, sans-serif",
   whiteSpace: "nowrap",
 };
 
@@ -128,7 +128,7 @@ function PageTreeItem({
           margin: "0.0625rem 0.25rem",
           fontSize: "0.8125rem",
           color: "var(--color-ink)",
-          fontFamily: "var(--font-body)",
+          fontFamily: "Manrope, system-ui, sans-serif",
           minHeight: "2rem",
         }}
         onClick={() => onOpen(note.id)}
@@ -148,7 +148,7 @@ function PageTreeItem({
               color: "var(--color-muted)",
               width: "1rem",
               flexShrink: 0,
-              fontFamily: "var(--font-body)",
+              fontFamily: "Manrope, system-ui, sans-serif",
             }}
           >
             {expanded ? "▼" : "▶"}
@@ -185,7 +185,7 @@ function PageTreeItem({
             fontSize: "0.875rem",
             padding: "0 0.25rem",
             opacity: 0.5,
-            fontFamily: "var(--font-body)",
+            fontFamily: "Manrope, system-ui, sans-serif",
           }}
           onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
           onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.5")}
@@ -230,7 +230,7 @@ function TemplatePicker({ onPick }: { onPick: (key: string | null) => void }) {
           gridColumn: "1 / -1",
           fontSize: "1.125rem",
           fontWeight: 700,
-          fontFamily: "var(--font-display)",
+          fontFamily: "Fraunces, Georgia, serif",
           color: "var(--color-ink)",
           margin: "0 0 0.5rem",
         }}
@@ -1012,7 +1012,7 @@ export function App() {
               padding: "0.375rem 0.75rem",
               fontSize: "1rem",
               outline: "none",
-              fontFamily: "var(--font-body)",
+              fontFamily: "Manrope, system-ui, sans-serif",
             }}
           />
           <button
@@ -1030,7 +1030,7 @@ export function App() {
               color: "var(--color-muted)",
               padding: "0.25rem 0.5rem",
               fontSize: "0.6875rem",
-              fontFamily: "var(--font-mono, ui-monospace, monospace)",
+              fontFamily: "ui-monospace, monospace",
             }}
           >
             ⌘K
@@ -1064,7 +1064,7 @@ export function App() {
                     margin: "0.0625rem 0.25rem",
                     background:
                       note.id === activeNoteId ? "var(--color-paper)" : "transparent",
-                    fontFamily: "var(--font-body)",
+                    fontFamily: "Manrope, system-ui, sans-serif",
                   }}
                 >
                   {note.icon ? `${note.icon} ` : ""}
@@ -1086,7 +1086,7 @@ export function App() {
               <div style={{ fontSize: "1.75rem", lineHeight: 1 }}>📓</div>
               <div
                 style={{
-                  fontFamily: "var(--font-display)",
+                  fontFamily: "Fraunces, Georgia, serif",
                   fontWeight: 700,
                   fontSize: "1rem",
                   color: "var(--color-ink)",
@@ -1440,7 +1440,7 @@ export function App() {
                 fontSize: "0.875rem",
                 padding: "0.125rem",
                 lineHeight: 1,
-                fontFamily: "var(--font-body)",
+                fontFamily: "Manrope, system-ui, sans-serif",
                 minWidth: "1.25rem",
                 minHeight: "1.25rem",
                 display: "flex",
@@ -1474,7 +1474,7 @@ export function App() {
             outline: "none",
             fontSize: "1rem",
             color: "var(--color-muted)",
-            fontFamily: "var(--font-body)",
+            fontFamily: "Manrope, system-ui, sans-serif",
             padding: "0.125rem 0",
           }}
         />
@@ -1496,7 +1496,7 @@ export function App() {
           background: "transparent",
           color: "var(--color-ink)",
           border: "none",
-          fontFamily: "var(--font-display)",
+          fontFamily: "Fraunces, Georgia, serif",
           userSelect: "text",
           WebkitUserSelect: "text",
           flexShrink: 0,
@@ -1702,7 +1702,7 @@ export function App() {
           <div
             style={{
               padding: "1.25rem 1rem 0.75rem",
-              fontFamily: "var(--font-display)",
+              fontFamily: "Fraunces, Georgia, serif",
               fontWeight: 700,
               fontSize: "1.125rem",
             }}
@@ -1741,7 +1741,7 @@ export function App() {
             flexShrink: 0,
           }}
         >
-          <span style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}>notes</span>
+          <span style={{ fontFamily: "Fraunces, Georgia, serif", fontWeight: 700 }}>notes</span>
           {view.kind === "list" && !showTemplates && (
             <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
               <button

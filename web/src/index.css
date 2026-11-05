@@ -1,26 +1,36 @@
 @import "tailwindcss";
 
-@theme {
-  --font-body: "Manrope", system-ui, sans-serif;
-  --font-display: "Fraunces", Georgia, serif;
-  --color-accent: #c08552;
-  --color-paper: #fefdfb;
-  --color-ink: #1a1917;
-  --color-muted: #8a8780;
-  --color-line: #e8e5e0;
-  --color-panel: #f5f3f0;
-  --radius-card: 1.25rem;
-  --radius-btn: 0.75rem;
+/* Platform tokens: the store, the SDK and the compliance gate all expect these names. */
+:root {
+  --accent: #c08552;
+  --paper: #fefdfb;
+  --ink: #1a1917;
+  --muted: #8a8780;
+  --line: #e8e5e0;
+  --panel: #f5f3f0;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-paper: #0f0f0e;
-    --color-ink: #f2f0ed;
-    --color-muted: #7a7770;
-    --color-line: #2a2825;
-    --color-panel: #1a1918;
+    --paper: #0f0f0e;
+    --ink: #f2f0ed;
+    --muted: #7a7770;
+    --line: #2a2825;
+    --panel: #1a1918;
   }
+}
+
+@theme inline {
+  --font-body: "Manrope", system-ui, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+  --color-accent: var(--accent);
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-panel: var(--panel);
+  --radius-card: 1.25rem;
+  --radius-btn: 0.75rem;
 }
 
 * { box-sizing: border-box; }
@@ -28,7 +38,7 @@
 html, body, #root {
   margin: 0;
   height: 100%;
-  font-family: var(--font-body);
+  font-family: "Manrope", system-ui, sans-serif;
   background: var(--color-paper);
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
@@ -46,14 +56,14 @@ textarea, input {
   font-size: 16px;
 }
 
-h1, h2, h3 { font-family: var(--font-display); }
+h1, h2, h3 { font-family: "Fraunces", Georgia, serif; }
 
 /* ── TipTap Editor ─────────────────────────────────────────────────── */
 
 .tiptap {
   outline: none;
   color: var(--color-ink);
-  font-family: var(--font-body);
+  font-family: "Manrope", system-ui, sans-serif;
   font-size: 1rem;
   line-height: 1.7;
   min-height: 200px;
@@ -64,7 +74,7 @@ h1, h2, h3 { font-family: var(--font-display); }
 .tiptap > *:first-child { margin-top: 0; }
 
 .tiptap h1, .tiptap h2, .tiptap h3 {
-  font-family: var(--font-display);
+  font-family: "Fraunces", Georgia, serif;
   line-height: 1.3;
   margin: 1.25em 0 0.5em;
 }
@@ -132,7 +142,7 @@ h1, h2, h3 { font-family: var(--font-display); }
   background: none;
   padding: 0;
   font-size: 0.875rem;
-  font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
 .tiptap hr {
