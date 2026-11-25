@@ -61,11 +61,12 @@ export function BlockEditor({ content, onChange, editable = true }: BlockEditorP
   });
 
   useEffect(() => {
-    if (editor && editor.getHTML() !== content) {
+    if (!editor) return;
+    if (editor.getHTML() !== content) {
       editor.commands.setContent(content, { emitUpdate: false });
-      const text = editor.state.doc.textContent;
-      setWordCount(text.trim() ? text.trim().split(/\s+/).length : 0);
     }
+    const text = editor.state.doc.textContent;
+    setWordCount(text.trim() ? text.trim().split(/\s+/).length : 0);
   }, [content, editor]);
 
   const filteredCommands = slashFilter
